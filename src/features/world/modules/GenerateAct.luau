@@ -3,7 +3,7 @@
 --[=[
 	Generates an act's map from a seed: points of interest (PoiLayout), paths
 	between them (PathCarver), then wave function collapse for everything else
-	(Wfc) and a scatter of props (Decorate).
+	(Wfc), a scatter of props (Decorate) and the camps of enemies (Populate).
 
 	Pure and deterministic: the same (def, seed, VERSION) gives the same act on
 	the server and on every client. Anything that changes the output of a
@@ -14,6 +14,7 @@ local ActTypes = require("@Features/world/modules/ActTypes")
 local Decorate = require("@Features/world/modules/Decorate")
 local PathCarver = require("@Features/world/modules/PathCarver")
 local PoiLayout = require("@Features/world/modules/PoiLayout")
+local Populate = require("@Features/world/modules/Populate")
 local Rng = require("@Core/Rng")
 local TileSet = require("@Features/world/modules/TileSet")
 local Wfc = require("@Features/world/modules/Wfc")
@@ -32,7 +33,7 @@ export type Options = {
 local TWO_32 = 4294967296
 
 local GenerateAct = {
-	VERSION = 1,
+	VERSION = 3,
 }
 
 local function cellIndex(def: ActDef, x: number, y: number): number
@@ -99,6 +100,7 @@ function GenerateAct.generate(def: ActDef, seed: number, options: Options?): Act
 				tiles = solved,
 				pois = pois,
 				props = Decorate.scatter(def, tileSet, solved, Rng.new(Rng.derive(layoutSeed, 2000))),
+				camps = Populate.camps(def, tileSet, solved, pois, Rng.new(Rng.derive(layoutSeed, 3000))),
 				layoutAttempts = layoutAttempt,
 				wfcAttempts = wfcAttempts,
 				relaxed = relaxed,
@@ -123,6 +125,15 @@ function GenerateAct.hash(act: Act): number
 		hash = (hash * 31 + prop.x * 64 + prop.y) % TWO_32
 		hash = (hash * 31 + math.floor(prop.ox * 65536)) % TWO_32
 		hash = (hash * 31 + math.floor(prop.oy * 65536)) % TWO_32
+	end
+	for _, camp in act.camps do
+		hash = (hash * 31 + math.floor(camp.x * 64)) % TWO_32
+		hash = (hash * 31 + math.floor(camp.y * 64)) % TWO_32
+		for _, member in camp.enemies do
+			hash = (hash * 31 + #member.defId) % TWO_32
+			hash = (hash * 31 + math.floor(member.dx * 1024) % TWO_32) % TWO_32
+			hash = (hash * 31 + math.floor(member.dz * 1024) % TWO_32) % TWO_32
+		end
 	end
 	return hash
 end

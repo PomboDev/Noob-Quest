@@ -23,20 +23,20 @@ end
 
 return {
 	["earns nothing outside the phases that spawn"] = function()
-		for _, phase in { "Waiting", "Generating", "ExitOpen", "Victory", "Defeat" } do
+		for _, phase in { "Waiting", "Generating", "Exploring", "ExitOpen", "Victory", "Defeat" } do
 			Expect.equal(total(phase, 60), 0, phase)
 		end
 	end,
 
-	["charging brings far more enemies than exploring"] = function()
-		local exploring = total("Exploring", 30)
-		local charging = total("Charging", 30)
-		Expect.equal(exploring > 0, true)
-		Expect.equal(charging > exploring * 2, true)
+	["waves come while charging and in the boss fight, not while exploring"] = function()
+		Expect.equal(total("Exploring", 30), 0)
+		Expect.equal(total("Charging", 30) > 0, true)
+		Expect.equal(total("Boss", 60) > 0, true)
+		Expect.equal(total("Charging", 30) > total("Boss", 30), true)
 	end,
 
 	["a higher coefficient brings more"] = function()
-		Expect.equal(total("Exploring", 30, 3) > total("Exploring", 30, 1), true)
+		Expect.equal(total("Charging", 30, 3) > total("Charging", 30, 1), true)
 	end,
 
 	["spends no more than it earns"] = function()

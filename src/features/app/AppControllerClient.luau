@@ -12,9 +12,11 @@ local Players = game:GetService("Players")
 
 local AbilityButtons = require("@Features/heroes/modules/AbilityButtons")
 local BossBar = require("@Features/enemies/modules/BossBar")
+local DeathToast = require("@Features/run/modules/DeathToast")
 local HeroBar = require("@Features/heroes/modules/HeroBar")
 local HeroController = require("@Features/heroes/HeroControllerClient")
 local Log = require("@Core/Log")
+local MinimapView = require("@Features/minimap/modules/MinimapView")
 local PlayerController = require("@Features/player/PlayerControllerClient")
 local ResultsScreen = require("@Features/run/modules/ResultsScreen")
 local RunHud = require("@Features/run/modules/RunHud")
@@ -60,7 +62,9 @@ local function App()
 			keys = HeroController.getAbilityKeys(),
 			onUse = HeroController.activate,
 		}),
+		MinimapView(),
 		ResultsScreen(),
+		DeathToast(),
 	})
 end
 

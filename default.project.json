@@ -17,6 +17,9 @@
         "$className": "Folder",
         "Core": {
           "$className": "Folder",
+          "Angle": {
+            "$path": "src/core/Angle.luau"
+          },
           "DeltaCompress": {
             "$path": "src/core/DeltaCompress.luau"
           },
@@ -35,8 +38,14 @@
           "Rng": {
             "$path": "src/core/Rng.luau"
           },
+          "SpatialHash": {
+            "$path": "src/core/SpatialHash.luau"
+          },
           "StateMachine": {
             "$path": "src/core/StateMachine.luau"
+          },
+          "TrigTables": {
+            "$path": "src/core/TrigTables.luau"
           }
         },
         "Features": {
@@ -93,6 +102,9 @@
               "CombatMath": {
                 "$path": "src/features/combat/modules/CombatMath.luau"
               },
+              "CombatSim": {
+                "$path": "src/features/combat/modules/CombatSim.luau"
+              },
               "Targeting": {
                 "$path": "src/features/combat/modules/Targeting.luau"
               }
@@ -110,6 +122,9 @@
               },
               "EnemyDefs": {
                 "$path": "src/features/enemies/modules/EnemyDefs.luau"
+              },
+              "EnemySim": {
+                "$path": "src/features/enemies/modules/EnemySim.luau"
               },
               "EnemySnapshot": {
                 "$path": "src/features/enemies/modules/EnemySnapshot.luau"
@@ -138,11 +153,74 @@
               "AttackInput": {
                 "$path": "src/features/heroes/modules/AttackInput.luau"
               },
+              "HeroActions": {
+                "$path": "src/features/heroes/modules/HeroActions.luau"
+              },
+              "HeroAnimator": {
+                "$path": "src/features/heroes/modules/HeroAnimator.luau"
+              },
               "HeroBar": {
                 "$path": "src/features/heroes/modules/HeroBar.luau"
               },
               "HeroDefs": {
                 "$path": "src/features/heroes/modules/HeroDefs.luau"
+              },
+              "HeroInput": {
+                "$path": "src/features/heroes/modules/HeroInput.luau"
+              },
+              "HeroInputQueue": {
+                "$path": "src/features/heroes/modules/HeroInputQueue.luau"
+              },
+              "HeroMotion": {
+                "$path": "src/features/heroes/modules/HeroMotion.luau"
+              },
+              "HeroPrediction": {
+                "$path": "src/features/heroes/modules/HeroPrediction.luau"
+              },
+              "HeroSim": {
+                "$path": "src/features/heroes/modules/HeroSim.luau"
+              },
+              "HeroSnapshot": {
+                "$path": "src/features/heroes/modules/HeroSnapshot.luau"
+              },
+              "PoseBuffer": {
+                "$path": "src/features/heroes/modules/PoseBuffer.luau"
+              }
+            }
+          },
+          "Loot": {
+            "$className": "Folder",
+            "LootControllerClient": {
+              "$path": "src/features/loot/LootControllerClient.luau"
+            },
+            "Modules": {
+              "$className": "Folder",
+              "LootSim": {
+                "$path": "src/features/loot/modules/LootSim.luau"
+              },
+              "LootTables": {
+                "$path": "src/features/loot/modules/LootTables.luau"
+              }
+            }
+          },
+          "Minimap": {
+            "$className": "Folder",
+            "MinimapControllerClient": {
+              "$path": "src/features/minimap/MinimapControllerClient.luau"
+            },
+            "Modules": {
+              "$className": "Folder",
+              "GreedyMesh": {
+                "$path": "src/features/minimap/modules/GreedyMesh.luau"
+              },
+              "MinimapLayer": {
+                "$path": "src/features/minimap/modules/MinimapLayer.luau"
+              },
+              "MinimapMath": {
+                "$path": "src/features/minimap/modules/MinimapMath.luau"
+              },
+              "MinimapView": {
+                "$path": "src/features/minimap/modules/MinimapView.luau"
               }
             }
           },
@@ -189,6 +267,12 @@
             "$className": "Folder",
             "Modules": {
               "$className": "Folder",
+              "DeathPenalty": {
+                "$path": "src/features/run/modules/DeathPenalty.luau"
+              },
+              "DeathToast": {
+                "$path": "src/features/run/modules/DeathToast.luau"
+              },
               "Difficulty": {
                 "$path": "src/features/run/modules/Difficulty.luau"
               },
@@ -204,6 +288,9 @@
               "RunRewards": {
                 "$path": "src/features/run/modules/RunRewards.luau"
               },
+              "RunSim": {
+                "$path": "src/features/run/modules/RunSim.luau"
+              },
               "RunStateMachine": {
                 "$path": "src/features/run/modules/RunStateMachine.luau"
               },
@@ -213,6 +300,24 @@
             },
             "RunControllerClient": {
               "$path": "src/features/run/RunControllerClient.luau"
+            }
+          },
+          "Sim": {
+            "$className": "Folder",
+            "Modules": {
+              "$className": "Folder",
+              "Checksum": {
+                "$path": "src/features/sim/modules/Checksum.luau"
+              },
+              "Sim": {
+                "$path": "src/features/sim/modules/Sim.luau"
+              },
+              "SimClock": {
+                "$path": "src/features/sim/modules/SimClock.luau"
+              },
+              "SimContext": {
+                "$path": "src/features/sim/modules/SimContext.luau"
+              }
             }
           },
           "Trade": {
@@ -249,6 +354,9 @@
               "GenerateAct": {
                 "$path": "src/features/world/modules/GenerateAct.luau"
               },
+              "LobbySpace": {
+                "$path": "src/features/world/modules/LobbySpace.luau"
+              },
               "MapBuilder": {
                 "$path": "src/features/world/modules/MapBuilder.luau"
               },
@@ -258,11 +366,17 @@
               "PoiLayout": {
                 "$path": "src/features/world/modules/PoiLayout.luau"
               },
+              "Populate": {
+                "$path": "src/features/world/modules/Populate.luau"
+              },
               "TileSet": {
                 "$path": "src/features/world/modules/TileSet.luau"
               },
               "Wfc": {
                 "$path": "src/features/world/modules/Wfc.luau"
+              },
+              "WorldSim": {
+                "$path": "src/features/world/modules/WorldSim.luau"
               }
             },
             "WorldControllerClient": {
@@ -326,6 +440,12 @@
             "$path": "src/features/heroes/HeroServiceServer.luau"
           }
         },
+        "Loot": {
+          "$className": "Folder",
+          "LootServiceServer": {
+            "$path": "src/features/loot/LootServiceServer.luau"
+          }
+        },
         "Monetization": {
           "$className": "Folder",
           "MonetizationServiceServer": {
@@ -348,6 +468,12 @@
           "$className": "Folder",
           "RunServiceServer": {
             "$path": "src/features/run/RunServiceServer.luau"
+          }
+        },
+        "Sim": {
+          "$className": "Folder",
+          "SimServiceServer": {
+            "$path": "src/features/sim/SimServiceServer.luau"
           }
         },
         "Trade": {

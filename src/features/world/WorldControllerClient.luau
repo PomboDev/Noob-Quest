@@ -10,7 +10,8 @@
 	Once the ground around the spawn is there it tells the server, which was
 	holding the hero still until then.
 
-	The map is destroyed and rebuilt for every act, so nothing piles up.
+	The map is destroyed and rebuilt for every act, and dropped when the
+	players go back to the lobby, so nothing piles up.
 ]=]
 
 local Players = game:GetService("Players")
@@ -19,15 +20,24 @@ local RunService = game:GetService("RunService")
 local ActDefs = require("@Features/world/modules/ActDefs")
 local ActSpace = require("@Features/world/modules/ActSpace")
 local ActTypes = require("@Features/world/modules/ActTypes")
+local Charm = require("@Packages/charm")
 local GenerateAct = require("@Features/world/modules/GenerateAct")
 local Log = require("@Core/Log")
 local MapBuilder = require("@Features/world/modules/MapBuilder")
+local NavGrid = require("@Features/enemies/modules/NavGrid")
 local Network = require("@Core/Network")
 local TileSet = require("@Features/world/modules/TileSet")
 
 type Act = ActTypes.Act
 
 local WorldController = {}
+
+WorldController.state = {
+	-- The act being played, for the minimap. nil in the lobby.
+	act = Charm.atom(nil :: Act?),
+	-- Where heroes can walk in the act (see HeroController), nil in the lobby.
+	navGrid = Charm.atom(nil :: NavGrid.Grid?),
+}
 
 -- Tiles built per frame.
 local TILES_PER_FRAME = 24
@@ -139,10 +149,23 @@ function WorldController.onAct(seed: number, actIndex: number, version: number)
 	end
 
 	local act = GenerateAct.generate(ActDefs.forAct(actIndex), seed)
+	WorldController.state.act(act)
+	WorldController.state.navGrid(ActSpace.navGrid(act, TileSet.DEFAULT))
 	buildMap(act, actIndex)
 
 	if network then
 		network:fire("reportHash", GenerateAct.hash(act))
+	end
+end
+
+-- The run is over: the map is not needed in the lobby.
+function WorldController.onLobby()
+	WorldController.state.act(nil)
+	WorldController.state.navGrid(nil)
+	stopBuilding()
+	if mapFolder then
+		mapFolder:Destroy()
+		mapFolder = nil
 	end
 end
 

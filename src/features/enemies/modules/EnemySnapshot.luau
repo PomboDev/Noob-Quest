@@ -1,13 +1,15 @@
 --!strict
 
 --[=[
-	The enemy snapshot the server sends about 15 times a second: where every
-	enemy is. Packed into a buffer so 40 enemies stay well under the ~900 bytes
+	The enemy snapshot the server sends every tick: where every
+	enemy is. Packed into a buffer so 100 enemies stay under the ~900 bytes
 	an unreliable message can carry.
 
 	Per enemy, 8 bytes: id (u16), x and z in eighths of a stud (s16, so up to
 	4095 studs from the origin), angle (u8, a 256th of a turn) and flags (u8).
 ]=]
+
+local Angle = require("@Core/Angle")
 
 local EnemySnapshot = {}
 
@@ -15,7 +17,7 @@ export type Entry = {
 	id: number,
 	x: number,
 	z: number,
-	-- Radians, as in Targeting. Stored in 256 steps, so it comes back within half a step.
+	-- In Angle units (65536 to a turn). Stored in 256 steps, so it comes back within half a step (128 units).
 	angle: number,
 	flags: number,
 }
@@ -23,7 +25,8 @@ export type Entry = {
 local ENTRY_SIZE = 8
 local COORD_SCALE = 8
 local MAX_ENTRIES = 100
-local TURN = math.pi * 2
+local TURN = Angle.TURN
+local STEP = TURN / 256
 
 -- Flag bits.
 EnemySnapshot.TELEGRAPHING = 1
@@ -34,7 +37,7 @@ EnemySnapshot.SLAM = 4
 EnemySnapshot.MAX_ENTRIES = MAX_ENTRIES
 
 local function packAngle(angle: number): number
-	return math.floor((angle % TURN) / TURN * 256 + 0.5) % 256
+	return math.floor((angle % TURN) / STEP + 0.5) % 256
 end
 
 function EnemySnapshot.encode(entries: { Entry }): buffer
@@ -74,7 +77,7 @@ function EnemySnapshot.decode(data: buffer): { Entry }?
 			id = buffer.readu16(data, offset),
 			x = buffer.readi16(data, offset + 2) / COORD_SCALE,
 			z = buffer.readi16(data, offset + 4) / COORD_SCALE,
-			angle = buffer.readu8(data, offset + 6) / 256 * TURN,
+			angle = buffer.readu8(data, offset + 6) * STEP,
 			flags = buffer.readu8(data, offset + 7),
 		})
 	end

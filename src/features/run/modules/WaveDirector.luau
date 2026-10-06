@@ -5,14 +5,15 @@
 	tick, and passes the random numbers in, so the same inputs give the same
 	waves.
 
-	The director earns credits every second (more while the teleporter charges,
-	and more as the difficulty coefficient grows) and spends them on enemies
+	The director earns credits every second while the teleporter charges and
+	during the boss fight (more as the difficulty coefficient grows) and spends them on enemies
 	that cost credits. It picks the next enemy first, by weight, and saves up
 	for it, so a costly kind still turns up between cheap ones. It never
 	spawns past the alive cap, and credits stop piling up once there is a good
 	stock, so a quiet minute doesn't turn into one huge wave.
 ]=]
 
+local Angle = require("@Core/Angle")
 local NavGrid = require("@Features/enemies/modules/NavGrid")
 
 local WaveDirector = {}
@@ -33,9 +34,9 @@ export type State = {
 	next: Entry?,
 }
 
--- Credits per second at difficulty 1, for each phase of a run. Other phases earn nothing.
+-- Credits per second at difficulty 1, for each phase of a run. Other phases earn
+-- nothing: while exploring, the camps placed on the map are the enemies.
 local RATES: { [string]: number } = {
-	Exploring = 2,
 	Charging = 8,
 	Boss = 1,
 }
@@ -125,9 +126,10 @@ function WaveDirector.pickSpawnPoint(
 	random: () -> number
 ): (number?, number?)
 	for _ = 1, 30 do
-		local angle = random() * math.pi * 2
+		local angle = math.floor(random() * Angle.TURN)
 		local distance = minDistance + random() * (maxDistance - minDistance)
-		local x, z = heroX + math.sin(angle) * distance, heroZ + math.cos(angle) * distance
+		local sine, cosine = Angle.direction(angle)
+		local x, z = heroX + sine * distance, heroZ + cosine * distance
 		if NavGrid.walkableAt(grid, x, z) then
 			return x, z
 		end

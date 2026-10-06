@@ -1,3 +1,4 @@
+local Angle = require("../src/core/Angle")
 local EnemyDefs = require("../src/features/enemies/modules/EnemyDefs")
 local EnemySnapshot = require("../src/features/enemies/modules/EnemySnapshot")
 local Expect = require("./Expect")
@@ -12,12 +13,12 @@ return {
 	["round-trips ids, positions, angles and flags"] = function()
 		local entries = {
 			{ id = 1, x = 12.34, z = 250.9, angle = 0, flags = 0 },
-			{ id = 65535, x = -4.5, z = 0, angle = math.pi, flags = EnemySnapshot.TELEGRAPHING },
+			{ id = 65535, x = -4.5, z = 0, angle = Angle.HALF, flags = EnemySnapshot.TELEGRAPHING },
 			{
 				id = 300,
 				x = 287.99,
 				z = 143.2,
-				angle = 5.5,
+				angle = 58000,
 				flags = EnemySnapshot.TELEGRAPHING + EnemySnapshot.STUNNED,
 			},
 		}
@@ -30,17 +31,17 @@ return {
 			Expect.equal(result[index].flags, entry.flags)
 			near(result[index].x, entry.x, 1 / 16, "x")
 			near(result[index].z, entry.z, 1 / 16, "z")
-			near(result[index].angle, entry.angle, math.pi / 256 + 1e-9, "angle")
+			near(result[index].angle, entry.angle, 128, "angle")
 		end
 	end,
 
 	["negative and wrapped angles come back as the same direction"] = function()
 		local decoded = EnemySnapshot.decode(EnemySnapshot.encode({
-			{ id = 1, x = 0, z = 0, angle = -math.pi / 2, flags = 0 },
-			{ id = 2, x = 0, z = 0, angle = math.pi * 2 + 1, flags = 0 },
+			{ id = 1, x = 0, z = 0, angle = -Angle.QUARTER, flags = 0 },
+			{ id = 2, x = 0, z = 0, angle = Angle.TURN + 1000, flags = 0 },
 		})) :: { EnemySnapshot.Entry }
-		near(decoded[1].angle, math.pi * 1.5, math.pi / 256 + 1e-9, "-90 degrees")
-		near(decoded[2].angle, 1, math.pi / 256 + 1e-9, "a turn and a bit")
+		near(decoded[1].angle, Angle.QUARTER * 3, 128, "-90 degrees")
+		near(decoded[2].angle, 1000, 128, "a turn and a bit")
 	end,
 
 	["each enemy takes 8 bytes and 40 fit an unreliable message"] = function()

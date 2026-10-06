@@ -1,8 +1,11 @@
 --!strict
 
 --[=[
-	Aiming maths on plain numbers, so Lune can test it. Angles follow
-	Targeting: angle 0 faces +Z, and the direction of angle a is (sin a, cos a).
+	Aiming maths on plain numbers, so Lune can test it. This is for the client,
+	which turns the cursor into an aim: angles are radians, 0 faces +Z and the
+	direction of angle a is (sin a, cos a). The aim travels to the server as
+	an `Angle` unit in the hero's input, so nothing here has to be deterministic.
+	The server finds angles with `Angle.between`.
 ]=]
 
 local Targeting = require("@Features/combat/modules/Targeting")
@@ -47,7 +50,7 @@ function Aim.angleTo(fromX: number, fromZ: number, toX: number, toZ: number): nu
 	if dx == 0 and dz == 0 then
 		return nil
 	end
-	return Targeting.angleOf(dx, dz)
+	return math.atan2(dx, dz)
 end
 
 -- Turns the point under the cursor into an aim: if an enemy is within

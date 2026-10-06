@@ -27,6 +27,7 @@ syncback = "tools/syncback.luau"
 check = "tools/check.luau"
 format = "tools/format.luau"
 test = "tools/test.luau"
+gentrig = "tools/gentrig.luau"
 
 [dev_dependencies]
 scripts = { name = "pesde/scripts_rojo", version = "^0.2.0", target = "lune" }

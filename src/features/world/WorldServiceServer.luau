@@ -1,67 +1,66 @@
 --!strict
 
 --[=[
-	World, server side: the act's logical grid and the gameplay objects.
+	World, server side: builds what players see and touch for the world in the
+	simulation (see WorldSim), and tells every client which act to build.
 
-	The server holds only what gameplay needs: the generated act (tile ids and
-	points of interest), the nav grid for enemies, and a few Instances players
-	touch (teleporter, statues, chests, the exit portal) with their prompts.
-	It never builds the thousands of tiles and props: every client builds those
+	The server holds only a few Instances players touch (the lobby, and the
+	act's teleporter, statues, chests and exit portal) with their prompts. It
+	never builds the thousands of tiles and props: every client builds those
 	from the same seed (see WorldControllerClient), so switching acts is just
-	forgetting the grid and generating the next one.
+	forgetting the grid and generating the next one. The sim decides what
+	exists; this reacts to its events (`actGenerated`, `objectAdded`,
+	`objectRemoved`, `objectEnabled`, `lobby`).
 
-	The run feature calls `generate`, then listens to `observeInteract`.
+	Between runs everyone is in the lobby: a plain platform far from the act,
+	with a portal that starts the next run.
 
-	Heroes are placed at the spawn and held in place until the client says the
-	ground under it is built (`mapReady`), so nobody falls through a map that
-	is still streaming in. A hero who falls off the world is put back at the spawn.
+	Heroes are held in place when an act is generated, until the client says
+	the ground under it is built (`mapReady`), so nobody walks around a map
+	that is still streaming in. Holding only changes the inputs given to the
+	sim, so it is part of what a replay records.
+
+	Objects are used through the hero's input, not through ProximityPrompt's
+	own server event: the player's character stays at the spawn on the server,
+	and the sim checks the distance against the hero's simulated position. The
+	prompts only show the object and time the hold.
 ]=]
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 
-local ActDefs = require("@Features/world/modules/ActDefs")
 local ActSpace = require("@Features/world/modules/ActSpace")
-local ActTypes = require("@Features/world/modules/ActTypes")
 local GenerateAct = require("@Features/world/modules/GenerateAct")
+local HeroService = require("@Features/heroes/HeroServiceServer")
+local LobbySpace = require("@Features/world/modules/LobbySpace")
 local Log = require("@Core/Log")
-local NavGrid = require("@Features/enemies/modules/NavGrid")
 local Network = require("@Core/Network")
 local RateLimit = require("@Core/RateLimit")
-local TileSet = require("@Features/world/modules/TileSet")
+local SimContext = require("@Features/sim/modules/SimContext")
+local SimService = require("@Features/sim/SimServiceServer")
+local WorldSim = require("@Features/world/modules/WorldSim")
 
 local Packet = Network.Packet
 
-type Act = ActTypes.Act
-
-export type InteractCallback = (kind: string, id: string, player: Player) -> ()
-
 type Interactable = {
-	id: string,
-	kind: string,
 	model: Instance,
 	prompt: ProximityPrompt,
-	-- Used up by the first use (statues, chests).
-	oneShot: boolean,
-	used: boolean,
 }
 
 local WorldService = {}
 
--- A hero this far below the walking surface has fallen off the map.
-local KILL_DEPTH = 40
 -- How long a hero is held while the client builds the ground under it.
 local HOLD_TIMEOUT = 15
-local PORTAL_ID = "portal"
+-- The lobby: a square platform this far along X, so it never overlaps an act.
+local LOBBY_X = LobbySpace.X
+local LOBBY_Z = LobbySpace.Z
+local LOBBY_SIZE = LobbySpace.SIZE
+local LOBBY_PORTAL_Z = LobbySpace.PORTAL_Z
 
 local network: Network.ServerNetwork
 
-local act: Act? = nil
-local actIndex = 0
-local navGrid: NavGrid.Grid? = nil
 local gameplay: Folder? = nil
+-- The Instances of the objects in the sim, by object id.
 local interactables: { [string]: Interactable } = {}
-local interactCallbacks: { InteractCallback } = {}
 -- Heroes held until their client has built the ground, with the act they wait for.
 local held: { [Player]: number } = {}
 
@@ -69,77 +68,33 @@ local requestLimit = RateLimit.new({ burst = 3, perSecond = 0.5 })
 local readyLimit = RateLimit.new({ burst = 3, perSecond = 0.5 })
 local hashLimit = RateLimit.new({ burst = 3, perSecond = 0.5 })
 
-local function rootOf(player: Player): BasePart?
-	local character = player.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if root and root:IsA("BasePart") then
-		return root
-	end
-	return nil
-end
-
 local function groundPoint(x: number, z: number): Vector3
 	return Vector3.new(x, ActSpace.GROUND_Y, z)
 end
 
 local function release(player: Player)
 	held[player] = nil
-	local root = rootOf(player)
-	if root then
-		root.Anchored = false
-	end
+	HeroService.setFrozen(player, false)
 end
 
--- Puts a hero at the spawn. `hold` keeps it still until the client has built the ground.
-local function placeHero(player: Player, hold: boolean)
-	local current = act
-	local character = player.Character
-	local root = rootOf(player)
-	if current == nil or character == nil or root == nil then
-		return
-	end
-
-	local spawnPoi = ActSpace.poisOfKind(current, "spawn")[1]
-	if spawnPoi == nil then
-		return
-	end
-
-	-- Spread players over the spawn plaza.
-	local centerX, centerZ = ActSpace.poiCenter(current, spawnPoi)
-	local slot = 0
-	for _, other in Players:GetPlayers() do
-		if other == player then
-			break
+-- Keeps a hero still until its client has built the ground of act `forAct`.
+local function hold(player: Player, forAct: number)
+	HeroService.setFrozen(player, true)
+	held[player] = forAct
+	task.delay(HOLD_TIMEOUT, function()
+		if held[player] == forAct then
+			Log.warn(`{player.Name}'s client never built the map, releasing`)
+			release(player)
 		end
-		slot += 1
-	end
-	local offsetX = (slot % 4 - 1.5) * 4
-	local offsetZ = (slot // 4) * 4
-
-	root.AssemblyLinearVelocity = Vector3.zero
-	root.AssemblyAngularVelocity = Vector3.zero
-	character:PivotTo(CFrame.new(centerX + offsetX, ActSpace.GROUND_Y + 5, centerZ + offsetZ))
-
-	if hold then
-		root.Anchored = true
-		held[player] = actIndex
-		local waitingFor = actIndex
-		task.delay(HOLD_TIMEOUT, function()
-			if held[player] == waitingFor then
-				Log.warn(`{player.Name}'s client never built the map, releasing`)
-				release(player)
-			end
-		end)
-	end
+	end)
 end
 
-local function clear()
-	for _, interactable in interactables do
+-- Destroys the act's objects. The lobby's stay.
+local function destroy(id: string)
+	local interactable = interactables[id]
+	if interactable then
 		interactable.model:Destroy()
-	end
-	table.clear(interactables)
-	if gameplay then
-		gameplay:ClearAllChildren()
+		interactables[id] = nil
 	end
 end
 
@@ -189,12 +144,12 @@ local function greyboxStructure(kind: string, position: Vector3): (Model, BasePa
 			model
 		).Material =
 			Enum.Material.Neon
-	elseif kind == "portal" then
+	elseif kind == "portal" or kind == "lobbyPortal" then
 		main = anchoredPart(
 			"Portal",
 			Vector3.new(10, 14, 1.5),
 			position + Vector3.new(0, 7, 0),
-			Color3.fromRGB(170, 90, 255),
+			if kind == "lobbyPortal" then Color3.fromRGB(80, 220, 120) else Color3.fromRGB(170, 90, 255),
 			model
 		)
 		main.Material = Enum.Material.Neon
@@ -259,12 +214,14 @@ end
 local PROMPTS: { [string]: { action: string, object: string, hold: number, oneShot: boolean } } = {
 	teleporter = { action = "Charge", object = "Teleporter", hold = 1, oneShot = false },
 	portal = { action = "Enter", object = "Exit Portal", hold = 0.5, oneShot = false },
+	lobbyPortal = { action = "Start run", object = "Run Portal", hold = 0.8, oneShot = false },
 	angelStatue = { action = "Pray", object = "Angel Statue", hold = 0.8, oneShot = true },
 	devilStatue = { action = "Bargain", object = "Devil Statue", hold = 0.8, oneShot = true },
 	chest = { action = "Open", object = "Chest", hold = 0.5, oneShot = true },
 }
 
-local function addInteractable(id: string, kind: string, position: Vector3)
+-- Builds an object and its prompt. A hero uses it by sending `objectId` in its input.
+local function addInteractable(id: string, objectId: number, kind: string, position: Vector3)
 	local spec = PROMPTS[kind]
 	local folder = gameplay
 	if spec == nil or folder == nil then
@@ -290,169 +247,73 @@ local function addInteractable(id: string, kind: string, position: Vector3)
 	prompt.HoldDuration = spec.hold
 	prompt.MaxActivationDistance = 12
 	prompt.RequiresLineOfSight = false
+	prompt:SetAttribute("InteractId", objectId)
 	prompt.Parent = anchor
 
-	local interactable: Interactable = {
-		id = id,
-		kind = kind,
-		model = model,
-		prompt = prompt,
-		oneShot = spec.oneShot,
-		used = false,
-	}
-	interactables[id] = interactable
-
-	prompt.Triggered:Connect(function(player)
-		if interactable.used or not prompt.Enabled then
-			return
-		end
-		if interactable.oneShot then
-			interactable.used = true
-			prompt.Enabled = false
-		end
-		for _, callback in interactCallbacks do
-			task.spawn(callback, kind, id, player)
-		end
-	end)
+	destroy(id)
+	interactables[id] = { model = model, prompt = prompt }
 end
 
--- Generates an act and builds its gameplay objects. Clients are told the seed and
--- build the map themselves. Errors if the points of interest can't be placed.
-function WorldService.generate(newActIndex: number, seed: number): Act
-	local started = os.clock()
-	local def = ActDefs.forAct(newActIndex)
-	local generated = GenerateAct.generate(def, seed)
+-- Builds the lobby platform, its walls and the portal that starts a run.
+local function buildLobby()
+	local folder = Instance.new("Folder")
+	folder.Name = "Lobby"
+	folder.Parent = workspace
 
-	clear()
-	act = generated
-	actIndex = newActIndex
-	navGrid = ActSpace.navGrid(generated, TileSet.DEFAULT)
-
-	for _, kind in { "teleporter", "angelStatue", "devilStatue", "chest" } do
-		for _, poi in ActSpace.poisOfKind(generated, kind :: ActTypes.PoiKind) do
-			local x, z = ActSpace.poiCenter(generated, poi)
-			addInteractable(poi.id, kind, groundPoint(x, z))
-		end
-	end
-
-	Log.debug(
-		`Generated {def.id} (seed {seed}) in {math.floor((os.clock() - started) * 1000)} ms: {generated.layoutAttempts} layouts, {generated.wfcAttempts} WFC runs{if generated.relaxed
-			then ", relaxed"
-			else ""}`
+	local floor = anchoredPart(
+		"Floor",
+		Vector3.new(LOBBY_SIZE, 2, LOBBY_SIZE),
+		Vector3.new(LOBBY_X, ActSpace.GROUND_Y - 1, LOBBY_Z),
+		Color3.fromRGB(150, 150, 160),
+		folder
 	)
+	floor.Material = Enum.Material.Slate
 
-	network:fireAllClients("onAct", seed, newActIndex, GenerateAct.VERSION)
-	for _, player in Players:GetPlayers() do
-		placeHero(player, true)
+	-- Low glass walls keep everyone on the platform.
+	local half = LOBBY_SIZE / 2
+	for _, side in { { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 } } do
+		local alongX = side[1] == 0
+		local wall = anchoredPart(
+			"Wall",
+			if alongX then Vector3.new(LOBBY_SIZE, 12, 2) else Vector3.new(2, 12, LOBBY_SIZE),
+			Vector3.new(LOBBY_X + side[1] * half, ActSpace.GROUND_Y + 6, LOBBY_Z + side[2] * half),
+			Color3.fromRGB(190, 220, 255),
+			folder
+		)
+		wall.Material = Enum.Material.Glass
+		wall.Transparency = 0.7
 	end
-	return generated
-end
 
--- Forgets the act and its objects (the run ended).
-function WorldService.reset()
-	clear()
-	act = nil
-	navGrid = nil
-	actIndex = 0
-	table.clear(held)
-end
+	local sign = anchoredPart(
+		"Sign",
+		Vector3.one,
+		Vector3.new(LOBBY_X, ActSpace.GROUND_Y + 18, LOBBY_PORTAL_Z),
+		Color3.new(1, 1, 1),
+		folder
+	)
+	sign.Transparency = 1
+	sign.CanCollide = false
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.fromOffset(420, 60)
+	gui.AlwaysOnTop = true
+	gui.Adornee = sign
+	gui.Parent = sign
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.BuilderSansBold
+	label.TextSize = 30
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextStrokeTransparency = 0.4
+	label.Text = "Step into the portal to start a run"
+	label.Parent = gui
 
-function WorldService.getAct(): Act?
-	return act
-end
-
-function WorldService.getActIndex(): number
-	return actIndex
-end
-
-function WorldService.getNavGrid(): NavGrid.Grid?
-	return navGrid
-end
-
-function WorldService.getGroundY(): number
-	return ActSpace.GROUND_Y
-end
-
--- The centre of the act's first point of interest of a kind, or nil.
-function WorldService.positionOf(kind: ActTypes.PoiKind): Vector3?
-	local current = act
-	local poi = if current then ActSpace.poisOfKind(current, kind)[1] else nil
-	if current and poi then
-		local x, z = ActSpace.poiCenter(current, poi)
-		return groundPoint(x, z)
-	end
-	return nil
-end
-
--- Every point of interest of a kind, as ground positions.
-function WorldService.positionsOf(kind: ActTypes.PoiKind): { Vector3 }
-	local positions = {}
-	local current = act
-	if current then
-		for _, poi in ActSpace.poisOfKind(current, kind) do
-			local x, z = ActSpace.poiCenter(current, poi)
-			table.insert(positions, groundPoint(x, z))
-		end
-	end
-	return positions
-end
-
--- Opens the exit portal where the teleporter is (or at the spawn without one).
-function WorldService.openPortal()
-	if interactables[PORTAL_ID] then
-		return
-	end
-	local position = WorldService.positionOf("teleporter") or WorldService.positionOf("spawn")
-	if position then
-		addInteractable(PORTAL_ID, "portal", position + Vector3.new(0, 0, 14))
-	end
-end
-
-function WorldService.closePortal()
-	local portal = interactables[PORTAL_ID]
-	if portal then
-		portal.model:Destroy()
-		interactables[PORTAL_ID] = nil
-	end
-end
-
--- Turns an object's prompt on or off, e.g. the teleporter while it is charging.
-function WorldService.setInteractable(id: string, enabled: boolean)
-	local interactable = interactables[id]
-	if interactable and not interactable.used then
-		interactable.prompt.Enabled = enabled
-	end
-end
-
--- Puts every hero back at the spawn (a new act, or a run starting again).
-function WorldService.sendToSpawn(player: Player)
-	placeHero(player, true)
-end
-
--- Runs `callback(kind, id, player)` whenever a player uses an object.
-function WorldService.observeInteract(callback: InteractCallback): () -> ()
-	table.insert(interactCallbacks, callback)
-	return function()
-		local index = table.find(interactCallbacks, callback)
-		if index then
-			table.remove(interactCallbacks, index)
-		end
-	end
-end
-
-local function watchPlayer(player: Player)
-	player.CharacterAdded:Connect(function()
-		-- Wait for the character to be whole before moving it.
-		task.defer(function()
-			if rootOf(player) == nil and player.Character then
-				player.Character:WaitForChild("HumanoidRootPart", 5)
-			end
-			placeHero(player, true)
-		end)
-	end)
-	if player.Character then
-		placeHero(player, true)
-	end
+	addInteractable(
+		WorldSim.LOBBY_PORTAL,
+		WorldSim.LOBBY_PORTAL_OBJECT,
+		"lobbyPortal",
+		groundPoint(LOBBY_X, LOBBY_PORTAL_Z)
+	)
 end
 
 function WorldService.init()
@@ -461,36 +322,58 @@ function WorldService.init()
 		mapReady = { Packet.NumberU8 }, -- client -> server: act index
 		reportHash = { Packet.NumberU32 }, -- client -> server: GenerateAct.hash of its map
 		onAct = { Packet.NumberU32, Packet.NumberU8, Packet.NumberU8 }, -- seed, act index, generator version
+		onLobby = {}, -- the run is over: drop the map
 	})
 
 	local folder = Instance.new("Folder")
 	folder.Name = "Gameplay"
 	folder.Parent = workspace
 	gameplay = folder
+	buildLobby()
 
-	for _, player in Players:GetPlayers() do
-		watchPlayer(player)
-	end
-	Players.PlayerAdded:Connect(watchPlayer)
-	Players.PlayerRemoving:Connect(function(player)
-		held[player] = nil
-	end)
-
-	-- The kill plane: anyone who has fallen off the world goes back to the spawn.
-	local sinceCheck = 0
-	RunService.Heartbeat:Connect(function(dt)
-		sinceCheck += dt
-		if sinceCheck < 0.25 or act == nil then
-			return
-		end
-		sinceCheck = 0
-
+	-- A new act: every client builds the map from the seed, and heroes wait for it.
+	SimService.observe("actGenerated", function(event: SimContext.Event)
+		network:fireAllClients("onAct", event.seed, event.act, GenerateAct.VERSION)
 		for _, player in Players:GetPlayers() do
-			local root = rootOf(player)
-			if root and root.Position.Y < ActSpace.GROUND_Y - KILL_DEPTH and held[player] == nil then
-				placeHero(player, false)
+			if HeroService.slotOf(player) then
+				hold(player, event.act)
 			end
 		end
+	end)
+
+	-- A hero that joins in the middle of a run waits for the map too.
+	SimService.observe("heroJoined", function(event: SimContext.Event)
+		local player = HeroService.playerOfSlot(event.slot)
+		if player and event.inAct then
+			hold(player, SimService.state().world.actIndex)
+		end
+	end)
+
+	SimService.observe("lobby", function()
+		network:fireAllClients("onLobby")
+		for player in held do
+			release(player)
+		end
+		table.clear(held)
+	end)
+
+	SimService.observe("objectAdded", function(event: SimContext.Event)
+		addInteractable(event.id, event.objectId, event.object, groundPoint(event.x, event.z))
+	end)
+
+	SimService.observe("objectRemoved", function(event: SimContext.Event)
+		destroy(event.id)
+	end)
+
+	SimService.observe("objectEnabled", function(event: SimContext.Event)
+		local interactable = interactables[event.id]
+		if interactable then
+			interactable.prompt.Enabled = event.enabled
+		end
+	end)
+
+	Players.PlayerRemoving:Connect(function(player)
+		held[player] = nil
 	end)
 end
 
@@ -499,9 +382,10 @@ function WorldService.requestAct(player: Player)
 	if not RateLimit.take(requestLimit, player) then
 		return
 	end
-	local current = act
+	local world = SimService.state().world
+	local current = world.act
 	if current then
-		network:fireClient(player, "onAct", current.seed, actIndex, GenerateAct.VERSION)
+		network:fireClient(player, "onAct", current.seed, world.actIndex, GenerateAct.VERSION)
 	end
 end
 
@@ -517,13 +401,14 @@ end
 -- A dev check: a client whose map differs from the server's has a generator that
 -- has drifted, and its map doesn't match the nav grid.
 function WorldService.reportHash(player: Player, hash: number)
-	local current = act
+	local world = SimService.state().world
+	local current = world.act
 	if current == nil or not RateLimit.take(hashLimit, player) then
 		return
 	end
 
 	if hash ~= GenerateAct.hash(current) then
-		Log.warn(`{player.Name}'s map differs from the server's (act {actIndex}, seed {current.seed})`)
+		Log.warn(`{player.Name}'s map differs from the server's (act {world.actIndex}, seed {current.seed})`)
 	else
 		Log.debug(`{player.Name}'s map matches the server's`)
 	end

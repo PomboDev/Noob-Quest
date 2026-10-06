@@ -69,6 +69,12 @@ function ActSpace.propPosition(act: Act, prop: ActTypes.Prop): (number, number)
 	return originX + (prop.x + prop.ox) * act.tileSize, originZ + (prop.y + prop.oy) * act.tileSize
 end
 
+-- The world position of a camp's centre.
+function ActSpace.campPosition(act: Act, camp: ActTypes.Camp): (number, number)
+	local originX, originZ = ActSpace.origin(act)
+	return originX + camp.x * act.tileSize, originZ + camp.y * act.tileSize
+end
+
 -- Rotation about the up axis for quarter turns clockwise seen from above.
 -- Roblox turns counter-clockwise for a positive angle, hence the sign.
 function ActSpace.rotationRadians(quarterTurns: number): number

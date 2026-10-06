@@ -1,312 +1,330 @@
 --!strict
 
 --[=[
-	Heroes, server side: each player's hero entity, its attack loop and its
-	abilities.
+	Heroes, server side: the link between each player and their hero in the
+	simulation (see SimService).
 
-	A hero is registered with CombatService when the character spawns, with
-	the stats of its HeroDef. Attacking is a held state (see AttackInput): the
-	client says when the button goes down or up and where it aims, and the
-	loop here swings on its own timer. Abilities are one request each, checked
-	for rate, a living hero and the cooldown, which only the server keeps.
+	The server never takes a position from a client. A player's client sends
+	numbered inputs (`sendInputs`), and each tick this feature gives the sim the
+	next one of every hero (see HeroInputQueue): the sim moves the hero, swings,
+	dashes and works out what is hit. The client runs the same HeroSim to
+	predict, and is told where its hero really is (`onHeroAck`) so it can
+	correct itself.
 
-	The client moves its own character for the dash, since it owns its physics.
-	The server only deals the damage and the i-frames.
+	The player's Roblox character is only a puppet: it is anchored here and
+	each client moves it from the numbers it is given.
+
+	Heroes in the sim belong to slots, never to Players. A slot is the lowest
+	free number when the character spawns; it is freed when it goes.
 ]=]
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 
-local Aim = require("@Features/heroes/modules/Aim")
-local AttackInput = require("@Features/heroes/modules/AttackInput")
-local CombatMath = require("@Features/combat/modules/CombatMath")
-local CombatService = require("@Features/combat/CombatServiceServer")
+local Angle = require("@Core/Angle")
 local HeroDefs = require("@Features/heroes/modules/HeroDefs")
+local HeroInput = require("@Features/heroes/modules/HeroInput")
+local HeroInputQueue = require("@Features/heroes/modules/HeroInputQueue")
+local HeroMotion = require("@Features/heroes/modules/HeroMotion")
+local HeroSim = require("@Features/heroes/modules/HeroSim")
+local HeroSnapshot = require("@Features/heroes/modules/HeroSnapshot")
 local Log = require("@Core/Log")
 local Network = require("@Core/Network")
 local RateLimit = require("@Core/RateLimit")
-local Targeting = require("@Features/combat/modules/Targeting")
+local Sim = require("@Features/sim/modules/Sim")
+local SimClock = require("@Features/sim/modules/SimClock")
+local SimContext = require("@Features/sim/modules/SimContext")
+local SimService = require("@Features/sim/SimServiceServer")
 
 local Packet = Network.Packet
 
-type HeroDef = HeroDefs.HeroDef
-
-type Hero = {
+type Link = {
 	player: Player,
-	entityId: number,
-	def: HeroDef,
-	input: AttackInput.State,
-	-- Per ability index: the os.clock() time it can be used again.
-	readyAt: { [number]: number },
+	slot: number,
+	queue: HeroInputQueue.Queue,
+	-- The number of the last input used (0 before any).
+	lastSeq: number,
+	-- Held in place (while the map loads): inputs are used as "did nothing".
+	frozen: boolean,
 }
 
 local HeroService = {}
 
+-- Bytes before the inputs in a sendInputs buffer: the last input number (u32) and the count (u8).
+local PACKET_HEADER = 5
+
 local network: Network.ServerNetwork
 
-local heroes: { [Player]: Hero } = {}
-local downedCallbacks: { (player: Player) -> () } = {}
+local byPlayer: { [Player]: Link } = {}
+local bySlot: { [number]: Link } = {}
+-- By slot, so every loop runs in the same order.
+local ordered: { Link } = {}
 
-local attackLimit = RateLimit.new({ burst = 10, perSecond = 5 })
--- setAim arrives unreliably at up to 20 Hz.
-local aimLimit = RateLimit.new({ burst = 40, perSecond = 25 })
-local abilityLimit = RateLimit.new({ burst = 4, perSecond = 3 })
+local inputLimit = RateLimit.new({ burst = 60, perSecond = 30 })
 local heroLimit = RateLimit.new({ burst = 2, perSecond = 0.5 })
 
-local function rootOf(player: Player): BasePart?
-	local character = player.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if root and root:IsA("BasePart") then
-		return root
+local function reorder()
+	table.clear(ordered)
+	for _, link in byPlayer do
+		table.insert(ordered, link)
 	end
-	return nil
+	table.sort(ordered, function(a, b)
+		return a.slot < b.slot
+	end)
+end
+
+local function lowestFreeSlot(): number
+	local slot = 1
+	while bySlot[slot] do
+		slot += 1
+	end
+	return slot
 end
 
 local function removeHero(player: Player)
-	local hero = heroes[player]
-	if hero then
-		CombatService.unregister(hero.entityId)
-		heroes[player] = nil
+	local link = byPlayer[player]
+	if link then
+		SimService.command({ kind = "leave", slot = link.slot })
+		byPlayer[player] = nil
+		bySlot[link.slot] = nil
+		reorder()
 	end
+end
+
+-- Anchors the character: nothing moves it on the server, and each client
+-- places it from the hero's numbers.
+local function anchor(character: Model)
+	task.spawn(function()
+		local root = character:WaitForChild("HumanoidRootPart", 10)
+		if root and root:IsA("BasePart") then
+			root.Anchored = true
+		end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.EvaluateStateMachine = false
+		end
+	end)
 end
 
 local function addHero(player: Player, character: Model)
 	removeHero(player)
 
-	local def = HeroDefs.get(HeroDefs.DEFAULT)
-	if def == nil then
-		return
-	end
-
-	local lastPosition = Vector3.zero
-	local entityId = CombatService.register({
-		team = "hero",
-		maxHp = def.maxHp,
-		armor = def.armor,
-		position = function()
-			local root = if player.Character == character then rootOf(player) else nil
-			if root then
-				lastPosition = root.Position
-			end
-			return lastPosition
-		end,
-		onDeath = function()
-			local hero = heroes[player]
-			if hero then
-				AttackInput.stop(hero.input)
-			end
-			for _, callback in downedCallbacks do
-				task.spawn(callback, player)
-			end
-		end,
-	})
-
-	heroes[player] = {
+	local slot = lowestFreeSlot()
+	local link: Link = {
 		player = player,
-		entityId = entityId,
-		def = def,
-		input = AttackInput.new(),
-		readyAt = {},
+		slot = slot,
+		queue = HeroInputQueue.new(),
+		lastSeq = 0,
+		frozen = false,
 	}
+	byPlayer[player] = link
+	bySlot[slot] = link
+	reorder()
+	anchor(character)
 
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		humanoid.WalkSpeed = def.walkSpeed
-	end
-
-	-- Dropped if the client hasn't connected yet: it asks again with requestHero.
-	network:fireClient(player, "onHeroEntity", entityId)
+	SimService.command({ kind = "join", slot = slot, userId = player.UserId, defId = HeroDefs.DEFAULT })
 end
 
 local function watch(player: Player)
-	local function onCharacter(character: Model)
-		-- The character may still be loading: its position function waits for the root part.
+	player.CharacterAdded:Connect(function(character)
 		addHero(player, character)
-	end
-
-	player.CharacterAdded:Connect(onCharacter)
+	end)
 	player.CharacterRemoving:Connect(function()
 		removeHero(player)
 	end)
 	if player.Character then
-		onCharacter(player.Character)
+		addHero(player, player.Character)
 	end
 end
 
--- Runs `callback(player)` whenever a hero is downed (HP at 0).
-function HeroService.observeDowned(callback: (player: Player) -> ()): () -> ()
-	table.insert(downedCallbacks, callback)
-	return function()
-		local index = table.find(downedCallbacks, callback)
-		if index then
-			table.remove(downedCallbacks, index)
-		end
-	end
+-- The player whose hero is in `slot`, if any.
+function HeroService.playerOfSlot(slot: number): Player?
+	local link = bySlot[slot]
+	return if link then link.player else nil
 end
 
--- The player's hero entity in CombatService, if it has one.
-function HeroService.getEntityId(player: Player): number?
-	local hero = heroes[player]
-	return if hero then hero.entityId else nil
+-- The slot of the player's hero, if it has one.
+function HeroService.slotOf(player: Player): number?
+	local link = byPlayer[player]
+	return if link then link.slot else nil
 end
 
--- One swing of the basic attack from the hero's position at `angle`.
-local function swing(hero: Hero, position: Vector3, angle: number)
-	local attack = hero.def.attack
-	local targets =
-		Targeting.inCone(CombatService.points("enemy"), position.X, position.Z, angle, attack.coneDegrees, attack.range)
-
-	for _, targetId in targets do
-		local crit = CombatMath.isCrit(attack.critChance, math.random())
-		CombatService.applyDamage(hero.entityId, targetId, attack.damage, "physical", crit)
+local function sendAck(link: Link)
+	local hero = Sim.hero(SimService.state(), link.slot)
+	if hero == nil then
+		return
 	end
 
-	network:fireAllClients("onHeroAttack", hero.player.UserId, angle)
-end
-
-local function attackLoop()
-	local now = os.clock()
-	for player, hero in heroes do
-		local input = hero.input
-		if not AttackInput.due(input, now) or not CombatService.isAlive(hero.entityId) then
-			continue
-		end
-
-		local root = rootOf(player)
-		if root == nil then
-			continue
-		end
-		local position = root.Position
-
-		local autoAngle: number? = nil
-		if input.auto then
-			local nearest =
-				Targeting.nearest(CombatService.points("enemy"), position.X, position.Z, hero.def.attack.autoRange)
-			local entity = if nearest then CombatService.get(nearest) else nil
-			if entity then
-				local at = entity.position()
-				autoAngle = Aim.angleTo(position.X, position.Z, at.X, at.Z)
-			end
-		end
-
-		-- Nothing in auto range: no swing, and the timer is left alone.
-		local angle = AttackInput.swingAngle(input, autoAngle)
-		if angle then
-			swing(hero, position, angle)
-			AttackInput.swung(input, now, hero.def.attack.cooldown)
-		end
-	end
-end
-
-local function useDash(hero: Hero, ability: HeroDefs.Dash, position: Vector3, angle: number)
-	local dx, dz = Targeting.direction(angle)
-	local targets = Targeting.inSegment(
-		CombatService.points("enemy"),
-		position.X,
-		position.Z,
-		position.X + dx * ability.distance,
-		position.Z + dz * ability.distance,
-		ability.halfWidth
+	local sim = hero.sim
+	network:fireClientUnreliable(
+		link.player,
+		"onHeroAck",
+		link.lastSeq,
+		sim.motion.x,
+		sim.motion.z,
+		sim.motion.dashLeft,
+		sim.motion.dashX,
+		sim.motion.dashZ,
+		sim.tick,
+		if link.frozen then 1 else 0,
+		HeroSim.remaining(sim, 1),
+		HeroSim.remaining(sim, 2),
+		HeroSim.remaining(sim, 3)
 	)
+end
 
-	CombatService.setInvulnerable(hero.entityId, ability.invulnerable)
-	for _, targetId in targets do
-		CombatService.applyDamage(hero.entityId, targetId, ability.damage, "physical", false)
+-- Holds a hero in place (inputs are used as "did nothing") or lets it go.
+function HeroService.setFrozen(player: Player, frozen: boolean)
+	local link = byPlayer[player]
+	if link then
+		link.frozen = frozen
+		sendAck(link)
 	end
 end
 
-local function useSlam(hero: Hero, ability: HeroDefs.Slam, position: Vector3)
-	local targets = Targeting.inRadius(CombatService.points("enemy"), position.X, position.Z, ability.radius)
-	for _, targetId in targets do
-		CombatService.applyDamage(hero.entityId, targetId, ability.damage, "physical", false)
-		CombatService.stun(targetId, ability.stun)
+-- What each hero does this tick: its next input, in order (see HeroInputQueue).
+local function provideInputs(): { [number]: HeroInput.Input }
+	local inputs: { [number]: HeroInput.Input } = {}
+	for _, link in ordered do
+		local input, seq = HeroInputQueue.take(link.queue)
+		-- Nothing has arrived: the hero waits, and so does its clock.
+		if input and seq then
+			inputs[link.slot] = if link.frozen then HeroInput.idle() else input
+			link.lastSeq = seq
+		end
+	end
+	return inputs
+end
+
+-- After every tick: tell each player where their hero is, and everyone where all heroes are.
+local function sendStates(state: Sim.State)
+	local entries: { HeroSnapshot.Entry } = {}
+	for _, hero in state.heroes do
+		local link = bySlot[hero.slot]
+		if link then
+			sendAck(link)
+		end
+		table.insert(entries, {
+			userId = hero.userId,
+			x = hero.sim.motion.x,
+			z = hero.sim.motion.z,
+			facing = hero.sim.facing,
+			flags = if HeroMotion.isDashing(hero.sim.motion) then HeroSnapshot.DASHING else 0,
+		})
+	end
+	if #entries > 0 then
+		network:fireAllClientsUnreliable("onHeroes", HeroSnapshot.encode(entries))
 	end
 end
 
 function HeroService.init()
 	network = Network.server("Hero", HeroService, {
-		setAttack = { Packet.Boolean, Packet.NumberF32, Packet.Boolean }, -- client -> server
 		requestHero = {}, -- client -> server
+		sendInputs = { Packet.Buffer }, -- client -> server: the last input's number, a count and the inputs
 		onHeroEntity = { Packet.NumberU16 }, -- the combat entity of the player's hero
-		setAim = { Packet.NumberF32 }, -- client -> server
-		useAbility = { Packet.NumberU8, Packet.NumberF32 }, -- client -> server
+		-- The hero's state after input `seq`: seq, x, z, dash ticks left, dash step x and z,
+		-- ticks used, flags (1 = held), and the ticks left on abilities 1 to 3.
+		onHeroAck = {
+			Packet.NumberU32,
+			Packet.NumberF64,
+			Packet.NumberF64,
+			Packet.NumberU8,
+			Packet.NumberF32,
+			Packet.NumberF32,
+			Packet.NumberU32,
+			Packet.NumberU8,
+			Packet.NumberU16,
+			Packet.NumberU16,
+			Packet.NumberU16,
+		},
+		onHeroes = { Packet.BufferLong }, -- every hero's position, see HeroSnapshot
 		onHeroAttack = { Packet.NumberU32, Packet.NumberF32 }, -- user id, angle
 		onAbilityUsed = { Packet.NumberU32, Packet.NumberU8, Packet.NumberF32 }, -- user id, ability, angle
 		onAbilityRejected = { Packet.NumberU8, Packet.NumberF32 }, -- ability, seconds until ready
 	})
+
+	SimService.setInputProvider(provideInputs)
+	SimService.afterStep(sendStates)
+
+	SimService.observe("heroJoined", function(event: SimContext.Event)
+		local link = bySlot[event.slot]
+		if link then
+			-- Dropped if the client hasn't connected yet: it asks again with requestHero.
+			network:fireClient(link.player, "onHeroEntity", event.entityId)
+			sendAck(link)
+		end
+	end)
+
+	-- Put somewhere (a spawn, the lobby): whatever it was doing stops, and the
+	-- inputs sent for the old place are dropped. The client is told at once.
+	SimService.observe("teleport", function(event: SimContext.Event)
+		local link = bySlot[event.slot]
+		if link then
+			HeroInputQueue.skipTo(link.queue, link.queue.newest)
+			local nextSeq = link.queue.nextSeq
+			link.lastSeq = math.max(link.lastSeq, if nextSeq then nextSeq - 1 else 0)
+			sendAck(link)
+		end
+	end)
+
+	SimService.observe("heroAttack", function(event: SimContext.Event)
+		network:fireAllClients("onHeroAttack", event.userId, Angle.toRadians(event.angle))
+	end)
+
+	SimService.observe("abilityUsed", function(event: SimContext.Event)
+		network:fireAllClients("onAbilityUsed", event.userId, event.index, Angle.toRadians(event.angle))
+	end)
+
+	SimService.observe("abilityRejected", function(event: SimContext.Event)
+		local link = bySlot[event.slot]
+		if link then
+			network:fireClient(link.player, "onAbilityRejected", event.index, event.ticks / SimClock.RATE)
+		end
+	end)
 
 	for _, player in Players:GetPlayers() do
 		watch(player)
 	end
 	Players.PlayerAdded:Connect(watch)
 	Players.PlayerRemoving:Connect(removeHero)
-
-	RunService.Heartbeat:Connect(attackLoop)
 end
 
 -- Network (client -> server)
 function HeroService.requestHero(player: Player)
-	local hero = heroes[player]
+	local link = byPlayer[player]
+	local hero = if link then Sim.hero(SimService.state(), link.slot) else nil
 	if hero and RateLimit.take(heroLimit, player) then
-		network:fireClient(player, "onHeroEntity", hero.entityId)
+		network:fireClient(player, "onHeroEntity", hero.entity.id)
 	end
 end
 
-function HeroService.setAttack(player: Player, active: boolean, angle: number, auto: boolean)
-	local hero = heroes[player]
-	if hero == nil or not RateLimit.take(attackLimit, player) then
-		return
-	end
-	if not CombatService.isAlive(hero.entityId) then
-		AttackInput.stop(hero.input)
+function HeroService.sendInputs(player: Player, data: buffer)
+	local link = byPlayer[player]
+	if link == nil or type(data) ~= "buffer" or not RateLimit.take(inputLimit, player) then
 		return
 	end
 
-	-- A bad message changes nothing, so the hero keeps doing what it was doing.
-	if not AttackInput.setAttack(hero.input, active, angle, auto) then
-		Log.debug(`{player.Name} sent a bad setAttack`)
-	end
-end
-
-function HeroService.setAim(player: Player, angle: number)
-	local hero = heroes[player]
-	if hero == nil or not RateLimit.take(aimLimit, player) then
+	local length = buffer.len(data)
+	if length < PACKET_HEADER then
 		return
 	end
-	AttackInput.setAim(hero.input, angle)
-end
-
-function HeroService.useAbility(player: Player, index: number, angle: number)
-	local hero = heroes[player]
-	if hero == nil or not RateLimit.take(abilityLimit, player) then
+	local last = buffer.readu32(data, 0)
+	local count = buffer.readu8(data, 4)
+	if count < 1 or length ~= PACKET_HEADER + count * HeroInput.SIZE then
 		return
 	end
 
-	local ability = HeroDefs.ability(hero.def, index)
-	if ability == nil or not AttackInput.isAngle(angle) or not CombatService.isAlive(hero.entityId) then
-		return
+	local inputs: { HeroInput.Input } = {}
+	for index = 0, count - 1 do
+		local input = HeroInput.read(data, PACKET_HEADER + index * HeroInput.SIZE)
+		if input == nil then
+			return
+		end
+		table.insert(inputs, input)
 	end
 
-	local root = rootOf(player)
-	if root == nil then
-		return
+	if not HeroInputQueue.receive(link.queue, last, inputs) then
+		Log.debug(`{player.Name} sent a bad input packet`)
 	end
-
-	local now = os.clock()
-	local readyAt = hero.readyAt[index] or 0
-	if now < readyAt then
-		network:fireClient(player, "onAbilityRejected", index, readyAt - now)
-		return
-	end
-	hero.readyAt[index] = now + ability.cooldown
-
-	if ability.kind == "dash" then
-		useDash(hero, ability, root.Position, angle)
-	else
-		useSlam(hero, ability, root.Position)
-	end
-
-	network:fireAllClients("onAbilityUsed", player.UserId, index, angle)
 end
 
 return HeroService

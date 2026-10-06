@@ -3,11 +3,14 @@
 --[=[
 	Target selection on the XZ plane, over plain lists of points.
 
-	Angles are in radians. Angle 0 faces +Z and angle pi / 2 faces +X: the
-	direction of angle a is (sin a, cos a). That matches the camera's yaw 0.
+	Angles are whole `Angle` units (see core/Angle): 0 faces +Z and a quarter
+	turn faces +X, the direction of angle a is (sin a, cos a), which matches the
+	camera's yaw 0. Nothing here calls libm trigonometry, so the sim can use it.
 	Every function returns ids closest first (equal distances: lower id first),
 	so the result is the same on every machine.
 ]=]
+
+local Angle = require("@Core/Angle")
 
 local Targeting = {}
 
@@ -33,14 +36,6 @@ local function sorted(found: { { id: number, distance: number } }): { number }
 	return ids
 end
 
-function Targeting.direction(angle: number): (number, number)
-	return math.sin(angle), math.cos(angle)
-end
-
-function Targeting.angleOf(dx: number, dz: number): number
-	return math.atan2(dx, dz)
-end
-
 -- Everything within `radius` of (x, z).
 function Targeting.inRadius(points: { Point }, x: number, z: number, radius: number): { number }
 	local found = {}
@@ -55,17 +50,17 @@ function Targeting.inRadius(points: { Point }, x: number, z: number, radius: num
 end
 
 -- Everything within `range` of the origin that lies inside a cone facing
--- `angle`, `coneDegrees` wide in total. A point on the origin counts.
+-- `angle`, `cone` wide in total (both in Angle units). A point on the origin counts.
 function Targeting.inCone(
 	points: { Point },
 	originX: number,
 	originZ: number,
 	angle: number,
-	coneDegrees: number,
+	cone: number,
 	range: number
 ): { number }
-	local facingX, facingZ = Targeting.direction(angle)
-	local minimumDot = math.cos(math.rad(coneDegrees) / 2)
+	local facingX, facingZ = Angle.direction(angle)
+	local minimumDot = Angle.cos(cone // 2)
 	local limit = range * range
 
 	local found = {}

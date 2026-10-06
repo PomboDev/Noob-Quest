@@ -14,7 +14,9 @@
 		                     Win ─▶ Victory
 
 		any phase between Generating and ExitOpen ─Downed─▶ Defeat
-		Victory or Defeat ─Start─▶ Generating (play again)
+		Victory or Defeat ─Reset─▶ Waiting (back in the lobby)
+
+	Waiting is the lobby: a run starts from there, and every run ends there.
 
 	The act number counts from 1 and moves on `advance`.
 ]=]
@@ -50,8 +52,8 @@ local STATES = { Waiting, Active, Generating, Exploring, Charging, Boss, ExitOpe
 
 local TRANSITIONS: { StateMachine.TransitionConfig<Context> } = {
 	{ from = Waiting, to = Generating, event = "Start" },
-	{ from = Victory, to = Generating, event = "Start" },
-	{ from = Defeat, to = Generating, event = "Start" },
+	{ from = Victory, to = Waiting, event = "Reset" },
+	{ from = Defeat, to = Waiting, event = "Reset" },
 	{ from = Generating, to = Exploring, event = "Generated" },
 	{ from = Exploring, to = Charging, event = "Charge" },
 	{ from = Charging, to = Boss, event = "Charged" },
@@ -98,7 +100,7 @@ function RunStateMachine.totalActs(run: Run): number
 	return run.context.totalActs
 end
 
--- Waiting, Victory or Defeat -> Generating, back at act 1. False in any other phase.
+-- Waiting (the lobby) -> Generating, at act 1. False in any other phase.
 function RunStateMachine.start(run: Run): boolean
 	local ok = StateMachine.send(run, "Start")
 	if ok then
@@ -130,6 +132,11 @@ function RunStateMachine.advance(run: Run): boolean
 		return true
 	end
 	return StateMachine.send(run, "Win")
+end
+
+-- Victory or Defeat -> Waiting: everyone is back in the lobby. False in any other phase.
+function RunStateMachine.reset(run: Run): boolean
+	return StateMachine.send(run, "Reset")
 end
 
 -- Every hero is down: any phase of an act ends in Defeat. False otherwise.

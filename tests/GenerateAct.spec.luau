@@ -206,7 +206,120 @@ return {
 		end
 		Expect.equal(counts.spawn, 1)
 		Expect.equal(counts.teleporter, 1)
-		Expect.equal(counts.chest, 3)
-		Expect.equal(counts.structure, 2)
+		Expect.equal(counts.chest, 8)
+		Expect.equal(counts.structure, 4)
+	end,
+
+	["the act is the size we ask for"] = function()
+		local act = GenerateAct.generate(ACT_1, 1)
+		Expect.equal(act.width, 48)
+		Expect.equal(act.height, 48)
+		Expect.equal(#act.tiles, 48 * 48)
+	end,
+
+	["camps stand on walkable ground, away from the spawn and each other"] = function()
+		local spec = ACT_1.camps :: ActTypes.CampSpec
+		for seed = 1, SEEDS do
+			local act = GenerateAct.generate(ACT_1, seed)
+			Expect.equal(#act.camps >= spec.count, true, `seed {seed} has {#act.camps} camps`)
+
+			local spawn = act.pois[1]
+			local spawnX, spawnY = spawn.x + spawn.w / 2, spawn.y + spawn.h / 2
+			for index, camp in act.camps do
+				Expect.equal(#camp.enemies > 0, true, `seed {seed} {camp.id} is not empty`)
+
+				local dx, dy = camp.x - spawnX, camp.y - spawnY
+				Expect.equal(
+					dx * dx + dy * dy >= spec.minFromSpawn ^ 2,
+					true,
+					`seed {seed} {camp.id} is far from the spawn`
+				)
+
+				for other = index + 1, #act.camps do
+					local b = act.camps[other]
+					local apartX, apartY = camp.x - b.x, camp.y - b.y
+					Expect.equal(
+						apartX * apartX + apartY * apartY >= spec.minApart ^ 2,
+						true,
+						`seed {seed} camps apart`
+					)
+				end
+
+				for _, member in camp.enemies do
+					local tx = math.floor(camp.x + member.dx / act.tileSize)
+					local ty = math.floor(camp.y + member.dz / act.tileSize)
+					Expect.equal(
+						tx >= 0 and ty >= 0 and tx < act.width and ty < act.height,
+						true,
+						`seed {seed} in bounds`
+					)
+					local id = act.tiles[ty * act.width + tx + 1]
+					Expect.equal(
+						TileSet.DEFAULT.variants[id].walkable,
+						true,
+						`seed {seed} {camp.id} stands on walkable ground`
+					)
+					Expect.equal(id ~= TileSet.DEFAULT.plaza, true, `seed {seed} {camp.id} stays off the plazas`)
+				end
+			end
+		end
+	end,
+
+	["every camp can be reached from the spawn on foot"] = function()
+		for seed = 1, SEEDS do
+			local act = GenerateAct.generate(ACT_1, seed)
+			local spawn = act.pois[1]
+			local reached = flood(act, TileSet.DEFAULT, spawn.cy * act.width + spawn.cx + 1)
+			for _, camp in act.camps do
+				local cell = math.floor(camp.y) * act.width + math.floor(camp.x) + 1
+				Expect.equal(reached[cell], true, `seed {seed} reaches {camp.id}`)
+			end
+		end
+	end,
+
+	["farther camps hold more and tougher enemies"] = function()
+		local spec = ACT_1.camps :: ActTypes.CampSpec
+		local nearest, farthest = spec.tiers[1], spec.tiers[#spec.tiers]
+		local sawSpitterNear, sawSpitterFar = false, false
+		for seed = 1, SEEDS do
+			local act = GenerateAct.generate(ACT_1, seed)
+			local spawn = act.pois[1]
+			local spawnX, spawnY = spawn.x + spawn.w / 2, spawn.y + spawn.h / 2
+			for _, camp in act.camps do
+				local distance = math.sqrt((camp.x - spawnX) ^ 2 + (camp.y - spawnY) ^ 2)
+				for _, member in camp.enemies do
+					if member.defId == "spitter" then
+						if distance <= nearest.upTo then
+							sawSpitterNear = true
+						elseif distance > spec.tiers[#spec.tiers - 1].upTo then
+							sawSpitterFar = true
+						end
+					end
+				end
+			end
+		end
+		Expect.equal(sawSpitterNear, false, "no spitters in the first tier")
+		Expect.equal(sawSpitterFar, true, "spitters in the last tier")
+		Expect.equal(farthest.maxSize > nearest.maxSize, true)
+	end,
+
+	["an act without camps has none"] = function()
+		local empty = table.clone(ACT_1)
+		empty.camps = nil
+		Expect.equal(#GenerateAct.generate(empty, 1).camps, 0)
+	end,
+
+	["camps are part of the hash"] = function()
+		local a = GenerateAct.generate(ACT_1, 1)
+		local b = GenerateAct.generate(ACT_1, 1)
+		Expect.equal(GenerateAct.hash(a), GenerateAct.hash(b))
+		table.remove(b.camps[1].enemies)
+		Expect.equal(GenerateAct.hash(a) ~= GenerateAct.hash(b), true)
+	end,
+	-- Pinned: generation must give the same act on every platform. If this moves
+	-- on purpose, bump GenerateAct.VERSION in the same change.
+	["gives the same hash on every platform"] = function()
+		Expect.equal(GenerateAct.VERSION, 3)
+		Expect.equal(GenerateAct.hash(GenerateAct.generate(ACT_1, 12345)), 3235104388)
 	end,
 }

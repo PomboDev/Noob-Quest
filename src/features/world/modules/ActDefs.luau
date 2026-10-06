@@ -1,8 +1,9 @@
 --!strict
 
 --[=[
-	What each act asks the generator for. Act 1 is a 24 x 24 tile arena
-	(288 studs across) with one teleporter far from the spawn.
+	What each act asks the generator for. Act 1 is a 48 x 48 tile map
+	(576 studs across) with one teleporter far from the spawn, and camps of
+	enemies standing around it.
 ]=]
 
 local ActTypes = require("@Features/world/modules/ActTypes")
@@ -11,17 +12,17 @@ type ActDef = ActTypes.ActDef
 
 local ACT_1: ActDef = {
 	id = "act1",
-	width = 24,
-	height = 24,
+	width = 48,
+	height = 48,
 	tileSize = 12,
 	spawnSize = 3,
 	spawnMargin = 2,
 	pois = {
-		{ kind = "teleporter", count = 1, size = 3, minFromSpawn = 14, maxFromSpawn = 30, minApart = 6 },
-		{ kind = "angelStatue", count = 1, size = 2, minFromSpawn = 6, maxFromSpawn = 22, minApart = 5 },
-		{ kind = "devilStatue", count = 1, size = 2, minFromSpawn = 6, maxFromSpawn = 22, minApart = 5 },
-		{ kind = "structure", count = 2, size = 3, minFromSpawn = 7, maxFromSpawn = 30, minApart = 5 },
-		{ kind = "chest", count = 3, size = 1, minFromSpawn = 4, maxFromSpawn = 30, minApart = 4 },
+		{ kind = "teleporter", count = 1, size = 3, minFromSpawn = 30, maxFromSpawn = 58, minApart = 12 },
+		{ kind = "angelStatue", count = 1, size = 2, minFromSpawn = 12, maxFromSpawn = 44, minApart = 10 },
+		{ kind = "devilStatue", count = 1, size = 2, minFromSpawn = 12, maxFromSpawn = 44, minApart = 10 },
+		{ kind = "structure", count = 4, size = 3, minFromSpawn = 14, maxFromSpawn = 58, minApart = 8 },
+		{ kind = "chest", count = 8, size = 1, minFromSpawn = 8, maxFromSpawn = 58, minApart = 6 },
 	},
 	props = {
 		{ kind = "tree", weight = 6 },
@@ -30,6 +31,39 @@ local ACT_1: ActDef = {
 	},
 	propDensity = 0.3,
 	wobble = 2,
+	camps = {
+		count = 22,
+		minFromSpawn = 12,
+		minApart = 6,
+		radius = 6,
+		tiers = {
+			{ upTo = 24, minSize = 3, maxSize = 4, entries = { { defId = "grunt", weight = 1 } } },
+			{
+				upTo = 42,
+				minSize = 4,
+				maxSize = 6,
+				entries = { { defId = "grunt", weight = 4 }, { defId = "runner", weight = 3 } },
+			},
+			{
+				upTo = 999,
+				minSize = 5,
+				maxSize = 7,
+				entries = {
+					{ defId = "grunt", weight = 3 },
+					{ defId = "runner", weight = 3 },
+					{ defId = "spitter", weight = 2 },
+				},
+			},
+		},
+		guards = {
+			{ kind = "teleporter", chance = 1 },
+			{ kind = "structure", chance = 1 },
+			{ kind = "angelStatue", chance = 0.5 },
+			{ kind = "devilStatue", chance = 0.5 },
+			{ kind = "chest", chance = 0.6 },
+		},
+		guardBonus = 2,
+	},
 }
 
 local ACTS: { ActDef } = { ACT_1 }

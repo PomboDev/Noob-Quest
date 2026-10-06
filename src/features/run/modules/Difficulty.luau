@@ -23,9 +23,20 @@ function Difficulty.partyFactor(partySize: number): number
 	return 1 + Difficulty.PER_EXTRA_PLAYER * (math.max(1, partySize) - 1)
 end
 
+-- `base ^ count` by repeated multiplication: `^` goes through the platform's
+-- libm, which may round differently from one machine to the next, and the
+-- coefficient feeds the simulation.
+local function power(base: number, count: number): number
+	local result = 1
+	for _ = 1, math.floor(count) do
+		result *= base
+	end
+	return result
+end
+
 function Difficulty.coefficient(minutes: number, actIndex: number, partySize: number): number
 	local time = 1 + Difficulty.PER_MINUTE * math.max(0, minutes) * Difficulty.partyFactor(partySize)
-	return time * Difficulty.PER_ACT ^ (math.max(1, actIndex) - 1)
+	return time * power(Difficulty.PER_ACT, math.max(1, actIndex) - 1)
 end
 
 -- Enemy HP grows with the full coefficient.

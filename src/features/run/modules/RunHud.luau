@@ -2,7 +2,8 @@
 
 --[=[
 	The run's HUD: act, timer and difficulty at the top, what to do next
-	under them, and the teleporter's charge while it charges.
+	under them, what the run has collected so far, and the teleporter's
+	charge while it charges. Hidden in the lobby.
 ]=]
 
 local Bar = require("@Features/app/modules/Bar")
@@ -14,7 +15,7 @@ local create = Vide.create
 
 local HINTS: { [string]: string } = {
 	Generating = "Building the map...",
-	Exploring = "Find the teleporter, and look for chests and statues!",
+	Exploring = "Find the teleporter. Watch out for packs, and look for chests and statues!",
 	Charging = "Stay close to the teleporter!",
 	Boss = "Defeat the Siege Golem!",
 	ExitOpen = "Step into the portal to finish!",
@@ -36,7 +37,7 @@ local function RunHud()
 		Name = "RunHud",
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 12),
-		Size = UDim2.fromOffset(460, 76),
+		Size = UDim2.fromOffset(560, 100),
 		BackgroundTransparency = 1,
 		Visible = active,
 
@@ -71,9 +72,24 @@ local function RunHud()
 			end,
 		}),
 
+		create("TextLabel")({
+			Name = "Loot",
+			Position = UDim2.fromOffset(0, 78),
+			Size = UDim2.new(1, 0, 0, 22),
+			BackgroundTransparency = 1,
+			Font = Enum.Font.BuilderSansBold,
+			TextSize = 18,
+			TextColor3 = Color3.fromRGB(255, 225, 130),
+			TextStrokeTransparency = 0.5,
+			Text = function()
+				local current = view()
+				return `Collected: {current.coins} coins   {current.xp} XP`
+			end,
+		}),
+
 		Bar({
 			name = "TeleporterCharge",
-			position = UDim2.fromOffset(80, 58),
+			position = UDim2.fromOffset(130, 58),
 			size = UDim2.fromOffset(300, 16),
 			color = Color3.fromRGB(70, 200, 230),
 			visible = function()

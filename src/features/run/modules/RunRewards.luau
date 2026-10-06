@@ -1,8 +1,9 @@
 --!strict
 
 --[=[
-	What a run pays out, worked out when it ends. Nothing a player picked up is
-	lost: defeat pays what was earned, victory adds a bonus.
+	Levels, and what finishing a run pays. Coins and XP are saved as they are
+	picked up (see LootServiceServer), so the end of a run only adds a bonus
+	for winning.
 ]=]
 
 local RunRewards = {}
@@ -12,16 +13,13 @@ export type Result = {
 	xp: number,
 }
 
-local XP_PER_POINT = 5
+local VICTORY_COINS = 50
 local VICTORY_XP = 100
 local MAX_LEVEL = 100
 
--- `points` is the reward of every enemy killed, `pickedUpCoins` what chests gave.
-function RunRewards.compute(points: number, pickedUpCoins: number, victory: boolean): Result
-	return {
-		coins = math.floor(math.max(0, pickedUpCoins) + math.max(0, points)),
-		xp = math.floor(math.max(0, points) * XP_PER_POINT + (if victory then VICTORY_XP else 0)),
-	}
+-- What beating the last act adds on top of everything picked up on the way.
+function RunRewards.victoryBonus(): Result
+	return { coins = VICTORY_COINS, xp = VICTORY_XP }
 end
 
 -- XP needed to get from `level` to the next one.

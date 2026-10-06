@@ -23,14 +23,16 @@ Decisions taken:
 | `monetization` | existing | 4 | Cosmetics, stash tabs, XP boost |
 | `playerState` | existing | 3 | Leases. Adds lobby activities |
 | `trade`, `auctionHouse` | existing | 4 | Rework for unique gear, plus safety gates |
+| `sim` | built (replays to do) | 1→ | The deterministic 20 Hz simulation of heroes, combat, enemies, loot, the world and the run, stepped by `SimService`, with checksums. Run logs and replays come later (see `docs/simulation.md`) |
 | `camera` | new | 1 | Fixed top-down camera (client only) |
+| `minimap` | built | 1 | Corner minimap with fog of war (client only): a `CanvasGroup` clips it to a circle, tiles are drawn as the hero explores them, icons show what was found, and a click or `M` opens the whole act |
 | `combat` | new | 1 | Entity registry (heroes and enemies), HP, damage, targeting, hit events |
 | `heroes` | new | 1 (Warrior), 2 (Archer, Mage) | Class defs, auto-attack, abilities (dash + 1–2 skills), input and ability buttons |
 | `enemies` | new | 1 | Server sim, AI, navigation, snapshots, client renderer and pool, boss patterns |
 | `world` | new | 1 | Procedural act generation (POIs → paths → WFC), shared server/client map builder, nav grid, interactables (teleporter, chests, angel/devil statues, exit portal; dungeons in phase 2) |
 | `run` | new | 1 | Run director: state machine, difficulty, wave director, teleporter charge, boss, results and rewards |
 | `items` | new | 2 | Bases and tiers, affixes, item generation, sockets, runes, runewords, relics, backpack grid, stat aggregation |
-| `loot` | new | 2 | Drop tables, per-player instanced drops, pickup |
+| `loot` | partly built | 1→2 | Drop tables, per-player instanced drops, pickup. Coins and XP orbs are built; gear drops wait for `items` |
 | `inventory` | new | 2 | Bag, equipment and backpack UI (drag, rotate, socket), server-validated moves |
 | `party` | new | 3 | Lobby, party, reserved-server teleport, scaling, downed and revive |
 | `stash` | new | 4 | Account-wide storage, tabs |
@@ -48,7 +50,6 @@ Game data lives in the owning feature's `modules/` (e.g. `heroes/modules/HeroDef
 - **Two aiming modes**, picked from the last input device (`UserInputService.LastInputTypeChanged`), so a player on a touch laptop or with a controller plugged in switches seamlessly:
   - **Aimed (mouse and keyboard)**, modelled on Diablo 4's PC controls. WASD moves and the mouse aims, like a twin-stick shooter.
     - Hold **left mouse** to attack towards the cursor. The attack repeats at the swing speed and doesn't need a target.
-    - Hold **Shift** to stand still while attacking (Diablo 4's "force stand still"), so the hero can hold a position without drifting towards enemies.
     - **Right mouse**, **Q** and **E** fire the skills. **Space** dashes towards the cursor.
     - A ring on the ground shows the aim point. The enemy under the cursor gets a `Highlight` outline.
   - **Auto-target (touch, and gamepad when the right stick is idle)**: the hero hits the nearest enemy in range and the player only moves. 2–3 large buttons (dash and one or two skills) have cooldowns. Twin-stick aiming doesn't work on a touchscreen, which is why touch keeps auto-target.
@@ -130,13 +131,21 @@ The act is a tile grid: about 24×24 tiles of 12 studs, so roughly 288 studs acr
 
 A kill plane returns fallen heroes to spawn.
 
+### Minimap (`minimap`)
+- Client only. It reads the act the client already generated (`WorldController.state.act`), so nothing is sent over the network.
+- The fog is the dark background of a `CanvasGroup`. The group renders its children as one image, so its `UICorner` clips the whole map into a circle (a rounded square when the map is open). A tile is only drawn once the hero has seen it (`MinimapMath.tilesWithin`, 55 studs): tiles in sight are bright, tiles seen before are blended towards the fog. Tiles are not one Frame each: `GreedyMesh` (pure, tested) merges neighbouring tiles of one colour into rectangles, in two meshes. The base mesh holds everything explored, dimmed, and is meshed again only when new tiles are found. The sight mesh holds the bright tiles in sight and is meshed again when they change. Each reuses a pool of Frames. A fully explored act drew about 1700 Frames this way before and about 470 now.
+- Icons (spawn, teleporter, statues, chests, structures, the exit portal) appear when their tile is explored. Used-up chests and statues dim, by reading the replicated prompt in `workspace.Gameplay`. Enemy dots show only inside the hero's sight. Camps are never shown ahead of time.
+- Click, tap or `M` opens the whole act in the middle of the screen. The map hides in the lobby. Roblox's player list is switched off, as it sits in the same corner.
+
 ### Run director (`run`)
-- **`RunStateMachine`** (pure, tested): `Waiting → Generating → Exploring → Charging → Boss → ExitOpen → (next act | Victory)`, and any phase can go to `Defeat`. Each act gets a new seed on the same server. The next act's logical grid is generated while the exit portal is open, so the swap has no hitch.
+- **`RunStateMachine`** (pure, tested): `Waiting (the lobby) → Generating → Exploring → Charging → Boss → ExitOpen → (next act | Victory)`, any phase of an act can go to `Defeat`, and `Victory`/`Defeat` reset to `Waiting`. Each act gets a new seed on the same server. The next act's logical grid is generated while the exit portal is open, so the swap has no hitch.
 - **`Difficulty`** (pure): a coefficient computed from elapsed minutes, act index and party size, in the style of Risk of Rain: `(1 + k·minutes·partyFactor) · 1.15^act`. It scales enemy HP and damage and the director's credit rate.
-- **`WaveDirector`** (pure): a credit-based director. It earns credits per second, scaled by the difficulty coefficient, with a boost while charging. It spends them on enemy "cards" by cost and weight, never past the alive cap. The output is a list of spawn decisions, which the service places on walkable cells off-screen from the heroes.
+- **`WaveDirector`** (pure): a credit-based director. It earns credits per second, scaled by the difficulty coefficient, only while the teleporter charges and during the boss fight: while exploring, the camps placed at generation are the enemies. It spends them on enemy "cards" by cost and weight, never past the alive cap. The output is a list of spawn decisions, which the service places on walkable cells off-screen from the heroes.
 - **Teleporter:** a prompt starts the charge. The charge fills (about 90 s at base) only while every alive hero is inside the ring, which is visible on the ground. At 100% the boss spawns at the teleporter. Killing the boss opens the exit portal.
 - **Run state replication:** `RunProtocol` sends a full view on change (phase, act, timer, difficulty, charge %, the run's coins and XP, heroes alive), the same pattern as `TradeProtocol`. The map's `(seed, act index, version)` travels separately, in `world`'s `onAct`.
-- **Results:** coins and XP go through `PlayerService.updateData` at victory or defeat. Nothing a player picked up is ever lost. Phase 1 offers "Play again" on the same server.
+- **Loot and results:** enemies drop coin piles and XP orbs (`loot`, per player, picked up by walking close), and chests and the devil deal drop coins. A pickup is saved at once with `PlayerService.updateData`, so there is no end-of-run payout. Winning adds a bonus and shows the results with a button back to the lobby.
+- **Death:** when every hero is down the party loses a share of its coins and of its XP progress (`DeathPenalty`, 20% of each, never a level), is sent back to the lobby at full health and sees a short notice of what it cost. There is no defeat screen.
+- **Lobby:** between runs everyone stands on an in-place lobby platform. Its portal starts the next run. The Phase 3 lobby place replaces it.
 
 ### Items, gear, runewords and backpack (`items`, `loot`, `inventory`). Phase 2
 - **Gear** is unique: `{uid, base, tier, rarity, ilvl, affixes: {[statId]: value}, sockets: {runeId | false}, runeword?}`.
@@ -178,7 +187,7 @@ A kill plane returns fallen heroes to spawn.
 
 Order matters. Each step ends with `pesde run check` green.
 
-**Status:** steps 1 to 10 are built and play-tested end to end in Studio through the MCP: a run starts by itself, the map streams in, the teleporter charges, the boss appears and dies, the portal pays out and ends the run, defeat pays too, and "Play again" starts a fresh act. Still to do for the slice: play-test on a touch device or the device emulator, the performance numbers under *Verification*, and the real art (tile, statue and enemy prefabs: everything is greybox for now).
+**Status:** steps 1 to 10 are built and play-tested end to end in Studio through the MCP: a run starts from the lobby portal, the map streams in, the teleporter charges, the boss appears and dies, the portal ends the run, and a death sends everyone back to the lobby. The map is 48×48 tiles with enemy camps placed at generation, and enemies drop coins and XP orbs. Still to do for the slice: play-test on a touch device or the device emulator, the performance numbers under *Verification*, and the real art (tile, statue and enemy prefabs: everything is greybox for now).
 
 1. **Docs:** write `docs/roadmap.md` (this design) and `docs/world-generation.md` (the three generation steps, the tile and prefab contract, the MCP asset workflow). Add a short "World and assets" pointer to `CLAUDE.md`.
 2. **World generation core:**
@@ -244,7 +253,7 @@ No player-data reshape in phase 1. Rewards use the existing `coins`/`level`/`xp`
   - `start_stop_play`
   - drive the character with `character_navigation`/`user_keyboard_input`
   - read `get_console_output` and check visuals with `screen_capture`
-- **Slice acceptance:** spawn into a generated Act 1 (different each run, always connected). The angel and devil statues work. Auto-attack kills grunts, dash and slam work with cooldowns, find and activate the teleporter, waves intensify while charging, the boss spawns at 100%, killing it opens the portal, the victory screen grants coins and XP (they persist after a rejoin), dying shows the defeat screen, and "Play again" resets.
+- **Slice acceptance:** spawn into a generated Act 1 (different each run, always connected). The angel and devil statues work. Auto-attack kills grunts, dash and slam work with cooldowns, find and activate the teleporter, waves intensify while charging, the boss spawns at 100%, killing it opens the portal, coins and XP are saved as they are picked up (they persist after a rejoin), the victory screen shows the totals, dying costs a share of coins and XP and returns you to the lobby, and the lobby portal starts a fresh run.
 - Check mobile in Studio's device emulator: touch buttons are large and the camera and thumbstick feel right.
 - Performance:
   - Act generation time is logged in dev, with a target under 200 ms on the server, spread across frames if needed.
@@ -257,4 +266,4 @@ No player-data reshape in phase 1. Rewards use the existing `coins`/`level`/`xp`
 - **Generation determinism across server and client** is the core assumption of client-built maps. It's covered by specs and a dev-only check: the client hashes its grid and the server compares that hash with its own. If they differ, it logs a warning and the server builds the map itself.
 - **Client-only collision geometry:** exploiters could already noclip with client-owned characters, and server sanity checks (below) cover both.
 - The Assets folder must be saved by hand in Studio (Save to File). The MCP can't save files.
-- Character movement is client-authoritative, as everywhere in Roblox. Add server speed and teleport sanity checks before co-op.
+- The server owns the game: the client sends numbered inputs and the server works out the positions, combat and loot, so noclip and speed hacks can't happen. See `docs/simulation.md` (the simulation is built; run logs and replays are not).

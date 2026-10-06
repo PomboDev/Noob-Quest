@@ -2,19 +2,10 @@ local Expect = require("./Expect")
 local RunRewards = require("../src/features/run/modules/RunRewards")
 
 return {
-	["victory pays a bonus, defeat pays what was earned"] = function()
-		local defeat = RunRewards.compute(40, 25, false)
-		Expect.equal(defeat.coins, 65)
-		Expect.equal(defeat.xp, 200)
-
-		local victory = RunRewards.compute(40, 25, true)
-		Expect.equal(victory.coins, 65, "coins don't depend on winning")
-		Expect.equal(victory.xp, 300)
-	end,
-
-	["nothing earned pays nothing, bad input pays nothing"] = function()
-		Expect.deepEqual(RunRewards.compute(0, 0, false), { coins = 0, xp = 0 })
-		Expect.deepEqual(RunRewards.compute(-5, -5, false), { coins = 0, xp = 0 })
+	["winning pays a bonus"] = function()
+		local bonus = RunRewards.victoryBonus()
+		Expect.equal(bonus.coins > 0, true)
+		Expect.equal(bonus.xp > 0, true)
 	end,
 
 	["xp rolls over into levels"] = function()

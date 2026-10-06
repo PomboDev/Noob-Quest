@@ -10,20 +10,22 @@
 	the clock is passed in, so Lune can test it.
 ]=]
 
+local Angle = require("@Core/Angle")
+
 local AttackInput = {}
 
 export type State = {
 	active: boolean,
-	-- Where the client is aiming (ignored in auto mode).
+	-- Where the client is aiming, in Angle units (ignored in auto mode).
 	angle: number,
 	-- Auto-target: swing at the nearest enemy and ignore the angle.
 	auto: boolean,
 	nextSwing: number,
 }
 
--- A finite number of a sane size: what a client may send as an angle.
+-- A whole number in [0, Angle.TURN): an angle in Angle units.
 function AttackInput.isAngle(value: any): boolean
-	return type(value) == "number" and value == value and value > -1e6 and value < 1e6
+	return type(value) == "number" and value % 1 == 0 and value >= 0 and value < Angle.TURN
 end
 
 function AttackInput.new(): State

@@ -1,8 +1,9 @@
 --!strict
 
 --[=[
-	What the screen shows when a run ends: how it went, what it paid and a
-	"Play again" button.
+	What the screen shows when a run is won: what the run collected and a
+	button back to the lobby. A death skips it: the player lands in the lobby
+	and sees what it cost (see DeathToast).
 ]=]
 
 local RunController = require("@Features/run/RunControllerClient")
@@ -27,18 +28,14 @@ end
 
 local function ResultsScreen()
 	local view = VideCharm.useAtom(RunController.state.view)
-	local finished = VideCharm.useAtom(RunController.state.finished)
-
-	local function won(): boolean
-		return view().phase == "Victory"
-	end
+	local showResults = VideCharm.useAtom(RunController.state.showResults)
 
 	return create("Frame")({
 		Name = "Results",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundColor3 = Color3.new(0, 0, 0),
 		BackgroundTransparency = 0.45,
-		Visible = finished,
+		Visible = showResults,
 		ZIndex = 10,
 
 		create("Frame")({
@@ -59,7 +56,7 @@ local function ResultsScreen()
 			}),
 
 			Line("Title", 1, function()
-				return if won() then "Victory!" else "Defeated"
+				return "Victory!"
 			end, 44, Color3.fromRGB(255, 225, 120)),
 			Line("Coins", 2, function()
 				return `Coins  +{view().coins}`
@@ -69,18 +66,18 @@ local function ResultsScreen()
 			end, 28, Color3.fromRGB(140, 210, 255)),
 
 			create("TextButton")({
-				Name = "PlayAgain",
+				Name = "ReturnToLobby",
 				LayoutOrder = 4,
 				Size = UDim2.fromOffset(240, 64),
 				BackgroundColor3 = Color3.fromRGB(70, 180, 90),
 				Font = Enum.Font.BuilderSansBold,
 				TextSize = 28,
 				TextColor3 = Color3.new(1, 1, 1),
-				Text = "Play again",
+				Text = "Return to lobby",
 				AutoButtonColor = true,
 				ZIndex = 12,
 				Activated = function()
-					RunController.playAgain()
+					RunController.returnToLobby()
 				end,
 
 				create("UICorner")({ CornerRadius = UDim.new(0, 16) }),

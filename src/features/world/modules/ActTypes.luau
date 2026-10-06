@@ -40,6 +40,42 @@ export type PropDef = {
 	weight: number,
 }
 
+-- One kind of enemy a camp can hold, and how likely it is next to the others.
+export type CampEntry = {
+	defId: string,
+	weight: number,
+}
+
+-- Camps farther than `upTo` cells from the spawn use the next tier. A tier
+-- decides how many enemies a camp holds and which kinds.
+export type CampTier = {
+	upTo: number,
+	minSize: number,
+	maxSize: number,
+	entries: { CampEntry },
+}
+
+-- A chance that a point of interest of `kind` gets a camp standing guard.
+export type CampGuard = {
+	kind: PoiKind,
+	chance: number,
+}
+
+export type CampSpec = {
+	-- Camps scattered over the map, on top of the guards.
+	count: number,
+	-- Cells between a camp and the spawn, and between two camps.
+	minFromSpawn: number,
+	minApart: number,
+	-- Studs: how far from its centre a camp's enemies stand.
+	radius: number,
+	-- Ordered by `upTo`, nearest first.
+	tiers: { CampTier },
+	guards: { CampGuard },
+	-- Extra enemies in a guard camp.
+	guardBonus: number,
+}
+
 export type ActDef = {
 	id: string,
 	width: number,
@@ -55,6 +91,8 @@ export type ActDef = {
 	propDensity: number,
 	-- Largest random extra cost per cell when carving paths: higher bends them more.
 	wobble: number,
+	-- The enemies standing around the map from the start. Nil for none.
+	camps: CampSpec?,
 }
 
 -- A decoration on a tile. `ox`, `oy` place it inside the tile as a fraction
@@ -89,6 +127,22 @@ export type TileSet = {
 	plaza: number,
 }
 
+-- An enemy of a camp, `dx` and `dz` studs from the camp's centre.
+export type CampMember = {
+	defId: string,
+	dx: number,
+	dz: number,
+}
+
+-- A pack of enemies placed at generation. `x` and `y` are the centre in tile
+-- units (3.5 is the middle of column 3), so a camp can sit anywhere on a tile.
+export type Camp = {
+	id: string,
+	x: number,
+	y: number,
+	enemies: { CampMember },
+}
+
 export type Act = {
 	id: string,
 	seed: number,
@@ -100,6 +154,7 @@ export type Act = {
 	-- The spawn first, then everything else.
 	pois: { Poi },
 	props: { Prop },
+	camps: { Camp },
 	layoutAttempts: number,
 	wfcAttempts: number,
 	-- WFC kept failing and the free cells were filled with plain ground.

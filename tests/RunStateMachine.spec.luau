@@ -77,16 +77,39 @@ return {
 		end
 	end,
 
-	["defeat and victory are final until play again"] = function()
+	["defeat and victory are final until the lobby"] = function()
 		local run = RunStateMachine.create(1)
 		RunStateMachine.start(run)
 		RunStateMachine.downed(run)
 		Expect.equal(RunStateMachine.downed(run), false)
 		Expect.equal(RunStateMachine.generated(run), false)
 		Expect.equal(RunStateMachine.charge(run), false)
+		Expect.equal(RunStateMachine.start(run), false, "a new run starts from the lobby")
+		Expect.equal(RunStateMachine.getPhase(run), "Defeat")
 	end,
 
-	["play again starts over at act 1"] = function()
+	["reset puts a finished run back in the lobby"] = function()
+		local run = RunStateMachine.create(1)
+		Expect.equal(RunStateMachine.reset(run), false, "nothing to reset in the lobby")
+
+		RunStateMachine.start(run)
+		Expect.equal(RunStateMachine.reset(run), false, "not while a run is on")
+		RunStateMachine.downed(run)
+		Expect.equal(RunStateMachine.reset(run), true)
+		Expect.equal(RunStateMachine.getPhase(run), "Waiting")
+
+		RunStateMachine.start(run)
+		RunStateMachine.generated(run)
+		RunStateMachine.charge(run)
+		RunStateMachine.charged(run)
+		RunStateMachine.bossDefeated(run)
+		RunStateMachine.advance(run)
+		Expect.equal(RunStateMachine.getPhase(run), "Victory")
+		Expect.equal(RunStateMachine.reset(run), true)
+		Expect.equal(RunStateMachine.getPhase(run), "Waiting")
+	end,
+
+	["a new run starts over at act 1"] = function()
 		local run = RunStateMachine.create(2)
 		RunStateMachine.start(run)
 		RunStateMachine.generated(run)
@@ -96,6 +119,7 @@ return {
 		RunStateMachine.advance(run)
 		Expect.equal(RunStateMachine.actIndex(run), 2)
 		RunStateMachine.downed(run)
+		RunStateMachine.reset(run)
 
 		Expect.equal(RunStateMachine.start(run), true)
 		Expect.equal(RunStateMachine.getPhase(run), "Generating")

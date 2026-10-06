@@ -7,11 +7,11 @@ return {
 		Expect.equal(AttackInput.due(state, 100), false)
 	end,
 
-	["rejects angles that aren't finite numbers and keeps the state"] = function()
+	["rejects angles that aren't whole units in a turn and keeps the state"] = function()
 		local state = AttackInput.new()
 		Expect.equal(AttackInput.setAttack(state, true, 1, false), true)
 
-		for _, bad in { 0 / 0, math.huge, -math.huge, 1e9, "1", true, {}, false } do
+		for _, bad in { 0 / 0, math.huge, -math.huge, 1e9, -1, 65536, 1.5, "1", true, {}, false } do
 			Expect.equal(AttackInput.setAttack(state, true, bad, false), false)
 			Expect.equal(AttackInput.setAim(state, bad), false)
 		end
@@ -76,12 +76,12 @@ return {
 
 	["auto mode ignores the client's angle"] = function()
 		local state = AttackInput.new()
-		AttackInput.setAttack(state, true, 2.5, true)
-		Expect.equal(AttackInput.swingAngle(state, 0.4), 0.4)
+		AttackInput.setAttack(state, true, 40000, true)
+		Expect.equal(AttackInput.swingAngle(state, 1000), 1000)
 		Expect.equal(AttackInput.swingAngle(state, nil), nil, "nothing in range: no swing")
 
-		AttackInput.setAttack(state, true, 2.5, false)
-		Expect.equal(AttackInput.swingAngle(state, 0.4), 2.5)
+		AttackInput.setAttack(state, true, 40000, false)
+		Expect.equal(AttackInput.swingAngle(state, 1000), 40000)
 	end,
 
 	["stop ends attacking without losing the timer"] = function()

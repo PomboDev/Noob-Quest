@@ -21,6 +21,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local Angle = require("@Core/Angle")
 local Charm = require("@Packages/charm")
 local CombatController = require("@Features/combat/CombatControllerClient")
 local EnemyDefs = require("@Features/enemies/modules/EnemyDefs")
@@ -142,7 +143,7 @@ local function release(view: View)
 end
 
 local function lerpAngle(from: number, to: number, alpha: number): number
-	local difference = (to - from + math.pi) % (math.pi * 2) - math.pi
+	local difference = (to - from + Angle.HALF) % Angle.TURN - Angle.HALF
 	return from + difference * alpha
 end
 
@@ -224,7 +225,7 @@ local function render()
 
 		local def = view.def
 		local position = Vector3.new(sample.x, feetY + def.size.y / 2, sample.z)
-		local dx, dz = Targeting.direction(sample.angle)
+		local dx, dz = Angle.direction(sample.angle)
 		view.model:PivotTo(CFrame.lookAt(position, position + Vector3.new(dx, 0, dz)))
 
 		if not view.shown then
@@ -331,6 +332,11 @@ local function stepShots(dt: number)
 			index += 1
 		end
 	end
+end
+
+-- Where every enemy is drawn now. Read it, don't change it: it is rebuilt every frame.
+function EnemyController.getPoints(): { Targeting.Point }
+	return points
 end
 
 function EnemyController.start()
