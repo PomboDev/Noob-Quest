@@ -1,0 +1,9 @@
+std = "selene_project"
+
+[config]
+# Allow `_G.__DEV__`, which darklua injects at build time
+global_usage = { ignore_pattern = "^__" }
+
+[rules]
+# Vide passes properties and children in one table: create("Frame")({ Name = "X", Child() })
+mixed_table = "allow"

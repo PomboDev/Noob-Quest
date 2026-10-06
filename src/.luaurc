@@ -1,0 +1,14 @@
+{
+  "languageMode": "strict",
+  "lint": {
+    "*": true
+  },
+  "lintErrors": false,
+  "typeErrors": true,
+  "aliases": {
+    "Core": "./core",
+    "Features": "./features",
+    "Packages": "../roblox_packages",
+    "ServerPackages": "../roblox_server_packages"
+  }
+}

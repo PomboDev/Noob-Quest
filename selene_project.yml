@@ -1,0 +1,6 @@
+base: roblox
+name: selene_project
+globals:
+  require:
+    args:
+      - type: any

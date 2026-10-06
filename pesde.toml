@@ -1,0 +1,45 @@
+name = "pombodev/hero_siege_clone"
+version = "0.1.0"
+description = "Hero Siege style action roguelite"
+authors = ["PomboDev"]
+
+[engines]
+pesde = "^0.7.2"
+lune = "^0.10.4"
+
+[target]
+environment = "roblox"
+
+[indices]
+default = "https://github.com/pesde-pkg/index"
+
+[wally_indices]
+default = "https://github.com/UpliftGames/wally-index"
+
+[scripts]
+roblox_sync_config_generator = ".pesde/scripts/roblox_sync_config_generator.luau"
+sourcemap_generator = ".pesde/scripts/sourcemap_generator.luau"
+dev = "tools/dev.luau"
+build = "tools/build.luau"
+compile = "tools/compile.luau"
+generate = "tools/generate.luau"
+check = "tools/check.luau"
+format = "tools/format.luau"
+test = "tools/test.luau"
+
+[dev_dependencies]
+scripts = { name = "pesde/scripts_rojo", version = "^0.2.0", target = "lune" }
+rojo = { name = "pesde/rojo", version = "^7.6.1", target = "lune" }
+luau-lsp = { name = "pesde/luau_lsp", version = "^1.57.1", target = "lune" }
+stylua = { name = "pesde/stylua", version = "^2.3.1", target = "lune" }
+darklua = { name = "pesde/darklua", version = "^0.17.2", target = "lune" }
+selene = { name = "pesde/selene", version = "^0.29.0+toolchainlib.1", target = "lune" }
+
+[dependencies]
+profile-store = { wally = "lm-loleris/profilestore", version = "^1.0.3" }
+
+vide = { wally = "centau/vide", version = "^0.4.1" }
+charm = { wally = "littensy/charm", version = "^0.11.0" }
+ripple = { wally = "littensy/ripple", version = "^0.10" }
+vide-charm = { wally = "littensy/vide-charm", version = "^0.4.0" }
+vide-ripple = { wally = "littensy/vide-ripple", version = "^0.10" }

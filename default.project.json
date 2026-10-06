@@ -1,0 +1,199 @@
+{
+  "emitLegacyScripts": false,
+  "globIgnorePaths": [
+    "src/core/Network/NetworkServer.luau"
+  ],
+  "name": "game",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Packages": {
+        "$path": "roblox_packages"
+      },
+      "Source": {
+        "$className": "Folder",
+        "Core": {
+          "$className": "Folder",
+          "DeltaCompress": {
+            "$path": "src/core/DeltaCompress.luau"
+          },
+          "Loader": {
+            "$path": "src/core/Loader.luau"
+          },
+          "Log": {
+            "$path": "src/core/Log.luau"
+          },
+          "Network": {
+            "$path": "src/core/Network"
+          },
+          "RateLimit": {
+            "$path": "src/core/RateLimit.luau"
+          },
+          "StateMachine": {
+            "$path": "src/core/StateMachine.luau"
+          }
+        },
+        "Features": {
+          "$className": "Folder",
+          "App": {
+            "$className": "Folder",
+            "AppControllerClient": {
+              "$path": "src/features/app/AppControllerClient.luau"
+            }
+          },
+          "AuctionHouse": {
+            "$className": "Folder",
+            "AuctionHouseControllerClient": {
+              "$path": "src/features/auctionHouse/AuctionHouseControllerClient.luau"
+            },
+            "Modules": {
+              "$className": "Folder",
+              "AuctionEscrow": {
+                "$path": "src/features/auctionHouse/modules/AuctionEscrow.luau"
+              },
+              "AuctionProtocol": {
+                "$path": "src/features/auctionHouse/modules/AuctionProtocol.luau"
+              },
+              "AuctionRecord": {
+                "$path": "src/features/auctionHouse/modules/AuctionRecord.luau"
+              }
+            }
+          },
+          "Monetization": {
+            "$className": "Folder",
+            "Modules": {
+              "$className": "Folder",
+              "PurchaseReceipts": {
+                "$path": "src/features/monetization/modules/PurchaseReceipts.luau"
+              }
+            },
+            "MonetizationControllerClient": {
+              "$path": "src/features/monetization/MonetizationControllerClient.luau"
+            }
+          },
+          "Player": {
+            "$className": "Folder",
+            "Modules": {
+              "$className": "Folder",
+              "PlayerData": {
+                "$path": "src/features/player/modules/PlayerData.luau"
+              },
+              "PlayerMigrations": {
+                "$path": "src/features/player/modules/PlayerMigrations.luau"
+              }
+            },
+            "PlayerControllerClient": {
+              "$path": "src/features/player/PlayerControllerClient.luau"
+            }
+          },
+          "PlayerState": {
+            "$className": "Folder",
+            "Modules": {
+              "$className": "Folder",
+              "PlayerStateMachine": {
+                "$path": "src/features/playerState/modules/PlayerStateMachine.luau"
+              }
+            },
+            "PlayerStateControllerClient": {
+              "$path": "src/features/playerState/PlayerStateControllerClient.luau"
+            }
+          },
+          "Trade": {
+            "$className": "Folder",
+            "Modules": {
+              "$className": "Folder",
+              "TradeEscrow": {
+                "$path": "src/features/trade/modules/TradeEscrow.luau"
+              },
+              "TradeProtocol": {
+                "$path": "src/features/trade/modules/TradeProtocol.luau"
+              }
+            },
+            "TradeControllerClient": {
+              "$path": "src/features/trade/TradeControllerClient.luau"
+            }
+          }
+        },
+        "StartUp": {
+          "$className": "Folder",
+          "Client": {
+            "$path": "src/startup/Client.client.luau"
+          }
+        }
+      }
+    },
+    "ServerScriptService": {
+      "Core": {
+        "$className": "Folder",
+        "Network": {
+          "$className": "Folder",
+          "NetworkServer": {
+            "$path": "src/core/Network/NetworkServer.luau"
+          }
+        }
+      },
+      "Features": {
+        "$className": "Folder",
+        "AuctionHouse": {
+          "$className": "Folder",
+          "AuctionHouseServiceServer": {
+            "$path": "src/features/auctionHouse/AuctionHouseServiceServer.luau"
+          },
+          "Modules": {
+            "$className": "Folder",
+            "AuctionBroadcastServer": {
+              "$path": "src/features/auctionHouse/modules/AuctionBroadcastServer.luau"
+            },
+            "AuctionIndexServer": {
+              "$path": "src/features/auctionHouse/modules/AuctionIndexServer.luau"
+            },
+            "AuctionLedgerServer": {
+              "$path": "src/features/auctionHouse/modules/AuctionLedgerServer.luau"
+            }
+          }
+        },
+        "Monetization": {
+          "$className": "Folder",
+          "MonetizationServiceServer": {
+            "$path": "src/features/monetization/MonetizationServiceServer.luau"
+          }
+        },
+        "Player": {
+          "$className": "Folder",
+          "PlayerServiceServer": {
+            "$path": "src/features/player/PlayerServiceServer.luau"
+          }
+        },
+        "PlayerState": {
+          "$className": "Folder",
+          "PlayerStateServiceServer": {
+            "$path": "src/features/playerState/PlayerStateServiceServer.luau"
+          }
+        },
+        "Trade": {
+          "$className": "Folder",
+          "Modules": {
+            "$className": "Folder",
+            "TradeLedgerServer": {
+              "$path": "src/features/trade/modules/TradeLedgerServer.luau"
+            }
+          },
+          "TradeServiceServer": {
+            "$path": "src/features/trade/TradeServiceServer.luau"
+          }
+        }
+      },
+      "StartUp": {
+        "$className": "Folder",
+        "Server": {
+          "$path": "src/startup/Server.server.luau"
+        }
+      }
+    },
+    "ServerStorage": {
+      "Packages": {
+        "$path": "roblox_server_packages"
+      }
+    }
+  }
+}

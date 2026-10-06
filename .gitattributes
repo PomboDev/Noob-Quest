@@ -1,0 +1,6 @@
+# Normalize text files to LF
+* text=auto eol=lf
+
+# Roblox place and model files
+*.rbxl binary
+*.rbxm binary
