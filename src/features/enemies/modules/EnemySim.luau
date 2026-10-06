@@ -115,12 +115,17 @@ export type State = {
 local MAX_ALIVE = 80
 -- Heroes further away than this are ignored.
 local ACQUIRE_RANGE = 90
+-- How far along a path a hero's flow field reaches, in studs. An enemy further
+-- than that walks straight at the hero until it is within reach.
+local PATH_RANGE = 2 * ACQUIRE_RANGE
 -- An idle group wakes when a hero comes this close to one of its members.
 local WAKE_RANGE = 30
 -- How hard crowding pushes enemies apart, in studs per second.
 local SEPARATION_SPEED = 6
--- A telegraphed melee hit still lands if the hero is within this much more than the range.
-local MELEE_LENIENCY = 1.3
+-- A ranged enemy still fires if the hero is within this much more than its range
+-- when the wind-up ends (the shot can be dodged). A melee hit needs the hero in
+-- range: anything more lands hits the player sees from a distance.
+local RANGED_LENIENCY = 1.3
 local BOSS_SLAM_DAMAGE_FACTOR = 2
 -- The biggest enemy radius, so a separation query reaches every enemy that can touch.
 local MAX_RADIUS = 4
@@ -199,9 +204,14 @@ local function flowFor(sim: State, heroId: number, hx: number, hz: number): Flow
 	end
 
 	local entry = sim.flowFields[heroId]
-	if entry == nil or entry.cx ~= cx or entry.cy ~= cy then
-		entry = { cx = cx, cy = cy, field = FlowField.build(grid, cx, cy) }
+	local maxSteps = math.ceil(PATH_RANGE / grid.cellSize)
+	if entry == nil then
+		entry = { cx = cx, cy = cy, field = FlowField.build(grid, cx, cy, maxSteps) }
 		sim.flowFields[heroId] = entry
+	elseif entry.cx ~= cx or entry.cy ~= cy then
+		-- Rebuilt in place: only the area the last build reached is reset.
+		entry.cx, entry.cy = cx, cy
+		FlowField.build(grid, cx, cy, maxSteps, entry.field)
 	end
 	return entry.field
 end
@@ -344,7 +354,8 @@ local function resolveAttack(
 )
 	local def = enemy.def
 	local body = enemy.body
-	local nearest = Targeting.nearest(heroes, body.x, body.z, def.attackRange * MELEE_LENIENCY)
+	local reach = if def.behaviour == "ranged" then def.attackRange * RANGED_LENIENCY else def.attackRange
+	local nearest = Targeting.nearest(heroes, body.x, body.z, reach)
 	if nearest == nil then
 		return
 	end

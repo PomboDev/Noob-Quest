@@ -6,8 +6,8 @@
 
 	Every other server feature is an adapter over this one:
 	- inputs: the heroes feature gives `setInputProvider` a function that
-	  returns what each hero does this tick (it is called once per tick, just
-	  before the step);
+	  returns what each hero does this tick, and a second input for heroes
+	  catching up on a backlog (it is called once per tick, just before the step);
 	- commands: heroes joining and leaving, and the run starting, are queued
 	  with `command` and applied at the start of the next step;
 	- events: `observe(kind, callback)` runs a callback for every event of a
@@ -27,7 +27,8 @@ local Sim = require("@Features/sim/modules/Sim")
 local SimClock = require("@Features/sim/modules/SimClock")
 local SimContext = require("@Features/sim/modules/SimContext")
 
-export type InputProvider = () -> { [number]: HeroInput.Input }
+-- What each hero does this tick, by slot, and a second input for heroes catching up (see Sim.Frame).
+export type InputProvider = () -> ({ [number]: HeroInput.Input }, { [number]: HeroInput.Input }?)
 export type AfterStep = (state: Sim.State) -> ()
 
 local SimService = {}
@@ -44,17 +45,18 @@ local afterSteps: { AfterStep } = {}
 -- Runs one tick: the inputs and commands in, the events out to the observers.
 local function tick()
 	local inputs: { [number]: HeroInput.Input } = {}
+	local catchUp: { [number]: HeroInput.Input }? = nil
 	local provider = inputProvider
 	if provider then
-		local ok, result = pcall(provider)
+		local ok, result, extra = pcall(provider)
 		if ok then
-			inputs = result
+			inputs, catchUp = result, extra
 		else
 			Log.warn(`Hero inputs failed: {result}`)
 		end
 	end
 
-	local frame: Sim.Frame = { inputs = inputs, commands = commands }
+	local frame: Sim.Frame = { inputs = inputs, catchUp = catchUp, commands = commands }
 	commands = {}
 
 	local ok, events = xpcall(Sim.step, debug.traceback, state, frame)

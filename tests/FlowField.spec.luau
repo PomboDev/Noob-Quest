@@ -109,4 +109,31 @@ return {
 		Expect.equal(dx, 0)
 		Expect.equal(dz, 0)
 	end,
+
+	["a build stops maxSteps cells out"] = function()
+		local g = grid({ "......" })
+		local field = FlowField.build(g, 0, 0, 3)
+		Expect.deepEqual(field.steps, { 0, 1, 2, 3, -1, -1 })
+		-- Beyond the field there is no direction: the caller walks straight.
+		local dx, dz = FlowField.direction(g, field, 5.5, 0.5)
+		Expect.equal(dx, 0)
+		Expect.equal(dz, 0)
+	end,
+
+	["rebuilding into a field gives what a fresh build gives"] = function()
+		local g = grid({
+			".....",
+			".##..",
+			".....",
+			"...#.",
+		})
+		local reused = FlowField.build(g, 0, 0)
+		for _, target in { { 4, 3 }, { 2, 0 }, { 1, 1 }, { 0, 3 }, { 4, 0 } } do
+			local again = FlowField.build(g, target[1], target[2], 3, reused)
+			Expect.equal(again, reused, "the same table")
+			Expect.deepEqual(again.steps, FlowField.build(g, target[1], target[2], 3).steps)
+			Expect.equal(again.targetCx, target[1])
+			Expect.equal(again.targetCy, target[2])
+		end
+	end,
 }
