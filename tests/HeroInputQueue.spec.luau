@@ -135,4 +135,65 @@ return {
 		Expect.equal(takeAim(queue), 5)
 		Expect.equal(takeAim(queue), nil)
 	end,
+
+	["a backlog that stands is caught up with a second input per tick"] = function()
+		local queue = HeroInputQueue.new()
+		-- A hitch: ten inputs arrive at once, then one more every tick.
+		HeroInputQueue.receive(queue, 4, packet(1, 4))
+		HeroInputQueue.receive(queue, 8, packet(5, 8))
+		HeroInputQueue.receive(queue, 10, packet(9, 10))
+		local last = 10
+		local used = {}
+		local ticks = 0
+		while HeroInputQueue.depth(queue) > 1 and ticks < 40 do
+			ticks += 1
+			last += 1
+			HeroInputQueue.receive(queue, last, packet(last, last))
+			local _, seq = HeroInputQueue.take(queue)
+			table.insert(used, seq)
+			local _, extra = HeroInputQueue.takeCatchUp(queue)
+			if extra then
+				table.insert(used, extra)
+			end
+		end
+		Expect.equal(ticks < 40, true, "the backlog drains")
+		for index, seq in used do
+			Expect.equal(seq, index, "still every input, in order")
+		end
+		Expect.equal(HeroInputQueue.depth(queue) <= 1, true)
+	end,
+
+	["one input waiting (jitter) is never caught up on"] = function()
+		local queue = HeroInputQueue.new()
+		HeroInputQueue.receive(queue, 2, packet(1, 2))
+		HeroInputQueue.take(queue)
+		for last = 3, 60 do
+			HeroInputQueue.receive(queue, last, packet(last, last))
+			Expect.equal(HeroInputQueue.take(queue) ~= nil, true)
+			Expect.equal(HeroInputQueue.takeCatchUp(queue), nil)
+		end
+	end,
+
+	["a backlog only counts once it has stood for a few ticks"] = function()
+		local queue = HeroInputQueue.new()
+		HeroInputQueue.receive(queue, 4, packet(1, 4))
+		HeroInputQueue.receive(queue, 8, packet(5, 8))
+		for tick = 1, HeroInputQueue.CATCH_UP_TICKS - 1 do
+			HeroInputQueue.take(queue)
+			Expect.equal(HeroInputQueue.takeCatchUp(queue), nil, `tick {tick}`)
+		end
+		HeroInputQueue.take(queue)
+		Expect.equal(HeroInputQueue.takeCatchUp(queue) ~= nil, true)
+	end,
+
+	["skipTo forgets the backlog"] = function()
+		local queue = HeroInputQueue.new()
+		HeroInputQueue.receive(queue, 4, packet(1, 4))
+		HeroInputQueue.receive(queue, 8, packet(5, 8))
+		for _ = 1, HeroInputQueue.CATCH_UP_TICKS do
+			HeroInputQueue.take(queue)
+		end
+		HeroInputQueue.skipTo(queue, 6)
+		Expect.equal(HeroInputQueue.takeCatchUp(queue), nil)
+	end,
 }

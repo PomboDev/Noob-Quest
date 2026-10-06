@@ -316,7 +316,8 @@ return {
 		Expect.equal(view.coefficient >= 1, true)
 	end,
 	-- Pinned: the same fight gave exactly this inside Roblox Studio. If it moves,
-	-- the simulation changed, and recorded runs no longer replay.
+	-- the simulation changed, and recorded runs no longer replay. Last moved when
+	-- enemy melee hits stopped landing beyond their attack range (two fewer hits).
 	["gives the same checksum and events on every platform"] = function()
 		local checksum, counts = SimScenario({
 			Sim = Sim,
@@ -324,17 +325,17 @@ return {
 			HeroInput = HeroInput,
 			HeroActions = HeroActions,
 		})
-		Expect.equal(checksum, 3612457021)
+		Expect.equal(checksum, 3273378176)
 		Expect.deepEqual(counts, {
 			abilityRejected = 44,
 			abilityUsed = 22,
 			actGenerated = 1,
-			damage = 33,
+			damage = 31,
 			despawn = 14,
 			died = 14,
 			drop = 46,
 			heroAttack = 146,
-			heroHealth = 14,
+			heroHealth = 12,
 			heroJoined = 2,
 			lootClear = 1,
 			objectAdded = 11,
@@ -343,5 +344,27 @@ return {
 			spawn = 32,
 			teleport = 2,
 		})
+	end,
+
+	["a hero catching up uses its second input as if it came a tick later"] = function()
+		local function walking(angle: number): HeroInput.Input
+			local input = HeroInput.idle()
+			input.moving = true
+			input.moveAngle = angle
+			return input
+		end
+
+		local apart = inAct(LOOT_SEED)
+		step(apart, { [1] = walking(0) })
+		step(apart, { [1] = walking(64) })
+
+		local together = inAct(LOOT_SEED)
+		Sim.step(together, { inputs = { [1] = walking(0) }, catchUp = { [1] = walking(64) }, commands = {} })
+
+		local a, b = (Sim.hero(apart, 1) :: any).sim, (Sim.hero(together, 1) :: any).sim
+		Expect.equal(b.motion.x, a.motion.x)
+		Expect.equal(b.motion.z, a.motion.z)
+		Expect.equal(b.tick, a.tick, "two inputs on the hero's own clock")
+		Expect.equal(together.ctx.tick + 1, apart.ctx.tick, "in one server tick")
 	end,
 }

@@ -8,7 +8,13 @@
 	- a late input doesn't make the server invent one: the hero waits (a stall)
 	  and its state after input N is the same as the client predicted;
 	- the client repeats its last few inputs in every packet, so a lost packet
-	  costs nothing, and a gap that never fills is taken as "did nothing".
+	  costs nothing, and a gap that never fills is taken as "did nothing";
+	- a backlog doesn't stay: every late packet or client hitch leaves inputs
+	  queued, and each one queued is a tick the server's hero runs behind the
+	  client's. When a backlog has stood for a few ticks, `takeCatchUp` hands
+	  out a second input per tick until it is gone. Cooldowns and the attack
+	  timer count the hero's own inputs, so using two in one tick changes
+	  nothing the client predicted.
 ]=]
 
 local HeroInput = require("@Features/heroes/modules/HeroInput")
@@ -23,6 +29,8 @@ export type Queue = {
 	newest: number,
 	-- Ticks spent waiting for a number that hasn't come while later ones have.
 	waited: number,
+	-- Ticks in a row that ended with at least CATCH_UP_DEPTH inputs still waiting.
+	behind: number,
 }
 
 -- More inputs than this waiting means the client is far ahead of the server
@@ -32,11 +40,15 @@ HeroInputQueue.MAX_BACKLOG = 13
 HeroInputQueue.HOLE_WAIT = 5
 -- The most inputs one packet may carry.
 HeroInputQueue.MAX_PER_PACKET = 4
+-- At least this many inputs left waiting after a take, CATCH_UP_TICKS ticks
+-- in a row, is a backlog to catch up on. One waiting is the jitter buffer.
+HeroInputQueue.CATCH_UP_DEPTH = 2
+HeroInputQueue.CATCH_UP_TICKS = 4
 -- Inputs further ahead than this are ignored when they arrive.
 local MAX_AHEAD = 64
 
 function HeroInputQueue.new(): Queue
-	return { nextSeq = nil, pending = {}, newest = 0, waited = 0 }
+	return { nextSeq = nil, pending = {}, newest = 0, waited = 0, behind = 0 }
 end
 
 -- A packet: `inputs` are the inputs numbered `last - #inputs + 1` to `last`,
@@ -87,6 +99,7 @@ function HeroInputQueue.take(queue: Queue): (HeroInput.Input?, number?)
 
 	local input = queue.pending[nextSeq]
 	if input == nil then
+		queue.behind = 0
 		if queue.newest > nextSeq then
 			-- Later inputs are here but this one isn't: give it a few ticks to arrive.
 			queue.waited += 1
@@ -102,6 +115,30 @@ function HeroInputQueue.take(queue: Queue): (HeroInput.Input?, number?)
 	queue.pending[nextSeq] = nil
 	queue.nextSeq = nextSeq + 1
 	queue.waited = 0
+
+	-- How many are ready to use after this one.
+	local ready = 0
+	while ready < HeroInputQueue.CATCH_UP_DEPTH and queue.pending[nextSeq + 1 + ready] do
+		ready += 1
+	end
+	queue.behind = if ready >= HeroInputQueue.CATCH_UP_DEPTH then queue.behind + 1 else 0
+	return input, nextSeq
+end
+
+-- A second input for this tick, as (input, number), when a backlog has stood
+-- for CATCH_UP_TICKS ticks (call it after `take`). nil otherwise: most ticks.
+function HeroInputQueue.takeCatchUp(queue: Queue): (HeroInput.Input?, number?)
+	local nextSeq = queue.nextSeq
+	if nextSeq == nil or queue.behind < HeroInputQueue.CATCH_UP_TICKS then
+		return nil, nil
+	end
+
+	local input = queue.pending[nextSeq]
+	if input == nil then
+		return nil, nil
+	end
+	queue.pending[nextSeq] = nil
+	queue.nextSeq = nextSeq + 1
 	return input, nextSeq
 end
 
@@ -120,6 +157,7 @@ function HeroInputQueue.skipTo(queue: Queue, seq: number)
 	queue.nextSeq = seq + 1
 	queue.newest = math.max(queue.newest, seq)
 	queue.waited = 0
+	queue.behind = 0
 end
 
 -- The highest input number used so far (0 before any).

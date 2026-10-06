@@ -20,6 +20,7 @@ Sim.step(state, frame) -> events
 
 A `Frame` is the **only** way anything outside changes the sim, so a log of frames is a log of everything that happened:
 - `inputs`: what each hero's player did this tick, by slot. A slot with no input doesn't step (its input hasn't arrived: the hero waits);
+- `catchUp` (optional): a second input some heroes use this tick, right after their first, while the server catches up on a backlog of their inputs (see Hero input);
 - `commands`: `join` (a hero enters, with slot, user id and hero def), `leave`, `startRun` (the run's two seeds) and `toLobby` (the results screen was left).
 
 `Event`s are plain tables with a `kind` (`damage`, `died`, `spawn`, `drop`, `pickup`, `actGenerated`, `objectAdded`, `victory`, `teleport` ...). The sim never calls out, so replays ignore them; adapters turn them into network messages, Instances and saved data (`SimService.observe(kind, fn)`).
@@ -62,6 +63,7 @@ The client numbers its inputs and sends the last 3 in every packet (`Hero.sendIn
 - sending faster doesn't move the hero faster;
 - an input that is late makes the hero wait (it doesn't make one up), so its state after input N is what the client predicted whatever the latency;
 - a gap that stays empty for 5 ticks is filled with "did nothing" and the client corrects itself.
+- a backlog doesn't stay. Each late packet or client hitch leaves inputs queued, and every queued input is a tick the server's hero runs behind what the player sees (enemies chase, and hit, where the hero was). When two or more inputs have stayed waiting for 4 ticks, the hero uses a second one per tick (`HeroInputQueue.takeCatchUp`, the frame's `catchUp`) until at most one is left. Cooldowns and the attack timer count the hero's own inputs, so nothing the client predicted changes.
 
 ## Movement and abilities
 
@@ -112,4 +114,4 @@ Pinned values in `tests/Angle.spec.luau`, `tests/HeroMotion.spec.luau` and `test
 6. `RunLog` (seeds, roster, the input each hero used each tick, checkpoints from `Sim.checksum`), `Replay`, storage, and `pesde run replay`. The frames the adapters already build are what a log records.
 7. Bump a `SIM_VERSION` whenever the simulation's outcome changes.
 
-Known gaps in what is built: heroes of other players are drawn from snapshots and have only been tested alone in Studio (the sim itself runs several heroes in the specs); nothing adapts the client's tick rate to the server's if their clocks drift (the server skips old inputs after 13 queued, and the client corrects); the party's hold while a map loads (`HeroService.setFrozen`) is decided outside the sim, but it only turns inputs into "did nothing", which a log records.
+Known gaps in what is built: heroes of other players are drawn from snapshots and have only been tested alone in Studio (the sim itself runs several heroes in the specs); a client whose clock runs slow against the server's still stalls its hero now and then (a backlog from a fast one is caught up on, and anything past 13 queued is skipped); the party's hold while a map loads (`HeroService.setFrozen`) is decided outside the sim, but it only turns inputs into "did nothing", which a log records.

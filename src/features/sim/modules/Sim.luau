@@ -38,6 +38,9 @@ export type Command =
 
 export type Frame = {
 	inputs: { [number]: HeroInput.Input },
+	-- A second input some heroes use this tick, right after their first: their
+	-- client is ahead of the server and the backlog is being caught up on.
+	catchUp: { [number]: HeroInput.Input }?,
 	commands: { Command },
 }
 
@@ -188,6 +191,17 @@ local function apply(state: State, command: Command)
 	end
 end
 
+-- Uses one input of a hero, and the world object it uses, if any.
+local function useInput(state: State, hero: HeroActions.Hero, input: HeroInput.Input)
+	local objectId = HeroActions.step(state.deps, state.ctx, hero, input)
+	if objectId then
+		local object = WorldSim.use(state.world, state.ctx, hero.sim.motion.x, hero.sim.motion.z, objectId)
+		if object then
+			RunSim.interact(state.run, state.deps, state.ctx, hero, object)
+		end
+	end
+end
+
 -- Advances the simulation by one tick and returns what happened.
 function Sim.step(state: State, frame: Frame): { SimContext.Event }
 	local ctx = state.ctx
@@ -198,18 +212,17 @@ function Sim.step(state: State, frame: Frame): { SimContext.Event }
 	end
 
 	-- Heroes in slot order: move, act, use objects.
+	local catchUp = frame.catchUp
 	for _, hero in state.heroes do
 		local input = frame.inputs[hero.slot]
 		if input == nil then
 			continue
 		end
 
-		local objectId = HeroActions.step(state.deps, ctx, hero, input)
-		if objectId then
-			local object = WorldSim.use(state.world, ctx, hero.sim.motion.x, hero.sim.motion.z, objectId)
-			if object then
-				RunSim.interact(state.run, state.deps, ctx, hero, object)
-			end
+		useInput(state, hero, input)
+		local extra = if catchUp then catchUp[hero.slot] else nil
+		if extra then
+			useInput(state, hero, extra)
 		end
 	end
 	drain(state)

@@ -181,18 +181,26 @@ function HeroService.setFrozen(player: Player, frozen: boolean)
 	end
 end
 
--- What each hero does this tick: its next input, in order (see HeroInputQueue).
-local function provideInputs(): { [number]: HeroInput.Input }
+-- What each hero does this tick: its next input, in order (see HeroInputQueue),
+-- and a second one for heroes whose client has a backlog queued.
+local function provideInputs(): ({ [number]: HeroInput.Input }, { [number]: HeroInput.Input })
 	local inputs: { [number]: HeroInput.Input } = {}
+	local catchUp: { [number]: HeroInput.Input } = {}
 	for _, link in ordered do
 		local input, seq = HeroInputQueue.take(link.queue)
 		-- Nothing has arrived: the hero waits, and so does its clock.
 		if input and seq then
 			inputs[link.slot] = if link.frozen then HeroInput.idle() else input
 			link.lastSeq = seq
+
+			local extra, extraSeq = HeroInputQueue.takeCatchUp(link.queue)
+			if extra and extraSeq then
+				catchUp[link.slot] = if link.frozen then HeroInput.idle() else extra
+				link.lastSeq = extraSeq
+			end
 		end
 	end
-	return inputs
+	return inputs, catchUp
 end
 
 -- After every tick: tell each player where their hero is, and everyone where all heroes are.

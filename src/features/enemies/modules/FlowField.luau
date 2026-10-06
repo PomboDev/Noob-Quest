@@ -5,6 +5,12 @@
 	so any number of enemies can find their way to it by always stepping
 	downhill, with no per-enemy pathfinding. Build one per hero, and again
 	when the hero moves to another cell.
+
+	A build can stop `maxSteps` cells out: cells further than that stay
+	unreachable (-1), so a rebuild costs the area around the target, not the
+	whole map. Rebuilding into the field it replaces (`reuse`) only resets the
+	cells the last build reached, so nothing the size of the map is allocated
+	or walked again.
 ]=]
 
 local NavGrid = require("@Features/enemies/modules/NavGrid")
@@ -16,9 +22,11 @@ export type Field = {
 	steps: { number },
 	targetCx: number,
 	targetCy: number,
+	-- The cells this build reached (indexes into `steps`), so the next build into it can reset them.
+	reached: { number },
+	reachedCount: number,
 }
 
-local ORTHOGONAL = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }
 -- Every neighbour, with the two orthogonal cells a diagonal step squeezes between.
 local NEIGHBOURS = {
 	{ 1, 0 },
@@ -31,33 +39,94 @@ local NEIGHBOURS = {
 	{ -1, -1 },
 }
 
--- Breadth-first from the target. A target that isn't walkable gives a field
--- where nothing can be reached.
-function FlowField.build(grid: NavGrid.Grid, targetCx: number, targetCy: number): Field
-	local steps = table.create(grid.cols * grid.rows, -1)
-	local field: Field = { steps = steps, targetCx = targetCx, targetCy = targetCy }
+-- Breadth-first from the target, at most `maxSteps` cells out (no limit
+-- without it). A target that isn't walkable gives a field where nothing can
+-- be reached. `reuse` is an earlier field of the same grid to build into.
+function FlowField.build(
+	grid: NavGrid.Grid,
+	targetCx: number,
+	targetCy: number,
+	maxSteps: number?,
+	reuse: Field?
+): Field
+	local cols, rows = grid.cols, grid.rows
+	local walkable = grid.walkable
+	local field: Field
+	if reuse and #reuse.steps == cols * rows then
+		field = reuse
+		local steps = field.steps
+		for index = 1, field.reachedCount do
+			steps[field.reached[index]] = -1
+		end
+		field.targetCx, field.targetCy = targetCx, targetCy
+	else
+		field = {
+			steps = table.create(cols * rows, -1),
+			targetCx = targetCx,
+			targetCy = targetCy,
+			reached = {},
+			reachedCount = 0,
+		}
+	end
+	field.reachedCount = 0
 
 	if not NavGrid.isWalkable(grid, targetCx, targetCy) then
 		return field
 	end
 
-	steps[targetCy * grid.cols + targetCx + 1] = 0
-	local queue = { targetCx, targetCy }
-	local head = 1
-	while head <= #queue do
-		local cx, cy = queue[head], queue[head + 1]
-		head += 2
+	local steps = field.steps
+	-- The queue is the list of reached cells: index = cy * cols + cx + 1.
+	local queue = field.reached
+	local limit = maxSteps or math.huge
+	local start = targetCy * cols + targetCx + 1
+	steps[start] = 0
+	queue[1] = start
+	local head, tail = 1, 1
+	while head <= tail do
+		local index = queue[head]
+		head += 1
 
-		local next = steps[cy * grid.cols + cx + 1] + 1
-		for _, offset in ORTHOGONAL do
-			local nx, ny = cx + offset[1], cy + offset[2]
-			if NavGrid.isWalkable(grid, nx, ny) and steps[ny * grid.cols + nx + 1] == -1 then
-				steps[ny * grid.cols + nx + 1] = next
-				table.insert(queue, nx)
-				table.insert(queue, ny)
+		local next = steps[index] + 1
+		if next > limit then
+			continue
+		end
+		local cx = (index - 1) % cols
+
+		-- The four orthogonal neighbours, inlined: this loop is most of the cost.
+		if cx + 1 < cols then
+			local n = index + 1
+			if walkable[n] and steps[n] == -1 then
+				steps[n] = next
+				tail += 1
+				queue[tail] = n
+			end
+		end
+		if cx > 0 then
+			local n = index - 1
+			if walkable[n] and steps[n] == -1 then
+				steps[n] = next
+				tail += 1
+				queue[tail] = n
+			end
+		end
+		if index + cols <= cols * rows then
+			local n = index + cols
+			if walkable[n] and steps[n] == -1 then
+				steps[n] = next
+				tail += 1
+				queue[tail] = n
+			end
+		end
+		if index > cols then
+			local n = index - cols
+			if walkable[n] and steps[n] == -1 then
+				steps[n] = next
+				tail += 1
+				queue[tail] = n
 			end
 		end
 	end
+	field.reachedCount = tail
 	return field
 end
 
