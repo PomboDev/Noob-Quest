@@ -7,6 +7,9 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
+      "Assets": {
+        "$path": "assets/shared"
+      },
       "Packages": {
         "$path": "roblox_packages"
       },
@@ -42,6 +45,12 @@
             "$className": "Folder",
             "AppControllerClient": {
               "$path": "src/features/app/AppControllerClient.luau"
+            },
+            "Modules": {
+              "$className": "Folder",
+              "Bar": {
+                "$path": "src/features/app/modules/Bar.luau"
+              }
             }
           },
           "AuctionHouse": {
@@ -59,6 +68,81 @@
               },
               "AuctionRecord": {
                 "$path": "src/features/auctionHouse/modules/AuctionRecord.luau"
+              }
+            }
+          },
+          "Camera": {
+            "$className": "Folder",
+            "CameraControllerClient": {
+              "$path": "src/features/camera/CameraControllerClient.luau"
+            },
+            "Modules": {
+              "$className": "Folder",
+              "CameraMath": {
+                "$path": "src/features/camera/modules/CameraMath.luau"
+              }
+            }
+          },
+          "Combat": {
+            "$className": "Folder",
+            "CombatControllerClient": {
+              "$path": "src/features/combat/CombatControllerClient.luau"
+            },
+            "Modules": {
+              "$className": "Folder",
+              "CombatMath": {
+                "$path": "src/features/combat/modules/CombatMath.luau"
+              },
+              "Targeting": {
+                "$path": "src/features/combat/modules/Targeting.luau"
+              }
+            }
+          },
+          "Enemies": {
+            "$className": "Folder",
+            "EnemyControllerClient": {
+              "$path": "src/features/enemies/EnemyControllerClient.luau"
+            },
+            "Modules": {
+              "$className": "Folder",
+              "BossBar": {
+                "$path": "src/features/enemies/modules/BossBar.luau"
+              },
+              "EnemyDefs": {
+                "$path": "src/features/enemies/modules/EnemyDefs.luau"
+              },
+              "EnemySnapshot": {
+                "$path": "src/features/enemies/modules/EnemySnapshot.luau"
+              },
+              "FlowField": {
+                "$path": "src/features/enemies/modules/FlowField.luau"
+              },
+              "NavGrid": {
+                "$path": "src/features/enemies/modules/NavGrid.luau"
+              }
+            }
+          },
+          "Heroes": {
+            "$className": "Folder",
+            "HeroControllerClient": {
+              "$path": "src/features/heroes/HeroControllerClient.luau"
+            },
+            "Modules": {
+              "$className": "Folder",
+              "AbilityButtons": {
+                "$path": "src/features/heroes/modules/AbilityButtons.luau"
+              },
+              "Aim": {
+                "$path": "src/features/heroes/modules/Aim.luau"
+              },
+              "AttackInput": {
+                "$path": "src/features/heroes/modules/AttackInput.luau"
+              },
+              "HeroBar": {
+                "$path": "src/features/heroes/modules/HeroBar.luau"
+              },
+              "HeroDefs": {
+                "$path": "src/features/heroes/modules/HeroDefs.luau"
               }
             }
           },
@@ -101,6 +185,36 @@
               "$path": "src/features/playerState/PlayerStateControllerClient.luau"
             }
           },
+          "Run": {
+            "$className": "Folder",
+            "Modules": {
+              "$className": "Folder",
+              "Difficulty": {
+                "$path": "src/features/run/modules/Difficulty.luau"
+              },
+              "ResultsScreen": {
+                "$path": "src/features/run/modules/ResultsScreen.luau"
+              },
+              "RunHud": {
+                "$path": "src/features/run/modules/RunHud.luau"
+              },
+              "RunProtocol": {
+                "$path": "src/features/run/modules/RunProtocol.luau"
+              },
+              "RunRewards": {
+                "$path": "src/features/run/modules/RunRewards.luau"
+              },
+              "RunStateMachine": {
+                "$path": "src/features/run/modules/RunStateMachine.luau"
+              },
+              "WaveDirector": {
+                "$path": "src/features/run/modules/WaveDirector.luau"
+              }
+            },
+            "RunControllerClient": {
+              "$path": "src/features/run/RunControllerClient.luau"
+            }
+          },
           "Trade": {
             "$className": "Folder",
             "Modules": {
@@ -123,6 +237,9 @@
               "ActDefs": {
                 "$path": "src/features/world/modules/ActDefs.luau"
               },
+              "ActSpace": {
+                "$path": "src/features/world/modules/ActSpace.luau"
+              },
               "ActTypes": {
                 "$path": "src/features/world/modules/ActTypes.luau"
               },
@@ -131,6 +248,9 @@
               },
               "GenerateAct": {
                 "$path": "src/features/world/modules/GenerateAct.luau"
+              },
+              "MapBuilder": {
+                "$path": "src/features/world/modules/MapBuilder.luau"
               },
               "PathCarver": {
                 "$path": "src/features/world/modules/PathCarver.luau"
@@ -144,6 +264,9 @@
               "Wfc": {
                 "$path": "src/features/world/modules/Wfc.luau"
               }
+            },
+            "WorldControllerClient": {
+              "$path": "src/features/world/WorldControllerClient.luau"
             }
           }
         },
@@ -185,6 +308,24 @@
             }
           }
         },
+        "Combat": {
+          "$className": "Folder",
+          "CombatServiceServer": {
+            "$path": "src/features/combat/CombatServiceServer.luau"
+          }
+        },
+        "Enemies": {
+          "$className": "Folder",
+          "EnemyServiceServer": {
+            "$path": "src/features/enemies/EnemyServiceServer.luau"
+          }
+        },
+        "Heroes": {
+          "$className": "Folder",
+          "HeroServiceServer": {
+            "$path": "src/features/heroes/HeroServiceServer.luau"
+          }
+        },
         "Monetization": {
           "$className": "Folder",
           "MonetizationServiceServer": {
@@ -203,6 +344,12 @@
             "$path": "src/features/playerState/PlayerStateServiceServer.luau"
           }
         },
+        "Run": {
+          "$className": "Folder",
+          "RunServiceServer": {
+            "$path": "src/features/run/RunServiceServer.luau"
+          }
+        },
         "Trade": {
           "$className": "Folder",
           "Modules": {
@@ -213,6 +360,12 @@
           },
           "TradeServiceServer": {
             "$path": "src/features/trade/TradeServiceServer.luau"
+          }
+        },
+        "World": {
+          "$className": "Folder",
+          "WorldServiceServer": {
+            "$path": "src/features/world/WorldServiceServer.luau"
           }
         }
       },

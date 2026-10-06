@@ -25,15 +25,29 @@ A flat array of tile-variant ids, `index = y * width + x + 1`, with `x`, `y` fro
 
 ## Tile and prefab contract
 
-- A tile is 12×12 studs, anchored, with its pivot at the centre.
-- `Variant.prefab` names a model under `ReplicatedStorage.Assets.Tiles`; `rotation` is quarter turns clockwise. If the model is missing, the client builds a greybox tile.
+- A tile is 12×12 studs and anchored. Its pivot is at the centre of the footprint, on the walking surface (`ActSpace.GROUND_Y`): the top of the tile is at pivot height, so a model's pivot is not its centre of mass.
+- `Variant.prefab` names a model under `ReplicatedStorage.Assets.Tiles`; `rotation` is quarter turns clockwise seen from above. If the model is missing, `MapBuilder` builds a greybox block (water is a solid raised pond, so nobody walks through it).
+- Props come from `Assets.Props` by kind (`tree`, `rock`, `bush`), with a greybox fallback. Props never collide. Structures with gameplay (teleporter, statues, chest, portal) come from `Assets.Structures` and are built by the server.
 - Weight-0 tiles (`path`, `plaza`) are never chosen by WFC, only fixed by the carver.
 - Water is the only unwalkable tile for now. Everything else is walkable.
 
 ## Who holds what
 
-The server keeps the logical grid and builds only gameplay Instances (teleporter, statues, chests, portal). Clients get `(seed, version)` and build the visuals and collision from the same grid. `GenerateAct.hash` fingerprints a grid: a dev-only check compares the client's hash with the server's.
+The server keeps the logical grid and the nav grid (`ActSpace.navGrid`), and builds only gameplay Instances (teleporter, statues, chests, portal). Clients get `(seed, act index, version)` through `WorldServiceServer`'s `onAct` and build the visuals and collision from the same grid with `MapBuilder`, a few tiles per frame, nearest to the spawn first. `GenerateAct.hash` fingerprints a grid: every client reports its hash and the server logs a warning when it differs from its own.
+
+The server holds the hero still at the spawn until the client says the ground under it is built (`mapReady`), so nobody falls through a map that is still streaming in. A hero who falls off the map goes back to the spawn.
+
+Space (`ActSpace`): the act is centred on the world origin, tile column x runs along +X and row y along +Z, and the walking surface is at height 0.
 
 ## Authoring prefabs
 
-Tile, structure, enemy and VFX models are built in a separate asset place through the Studio MCP, saved by hand, and pulled into `assets/` with `pesde run syncback`. See [roadmap.md](roadmap.md) for the pipeline.
+Tile, structure, enemy and VFX models are built in a separate asset place through the Studio MCP and pulled into git with `rojo syncback`. See [roadmap.md](roadmap.md) for the design.
+
+1. In the asset place, put prefabs under `ReplicatedStorage.Assets` (`Tiles`, `Structures`, `Enemies`, …). The MCP tools are `execute_luau`, `insert_asset`, `generate_procedural_model` and `screen_capture`.
+2. Right-click the `Assets` folder in the Explorer, choose Save to File, and save it by hand as `assets/places/Assets.rbxm`, which stays in git as the source of the prefabs (Rojo maps only `assets/shared/`). The MCP can't save files, and saving the whole place is refused.
+3. Run `pesde run syncback -- --dry-run --list` to preview, then `pesde run syncback`. A different model goes after the `--`: `pesde run syncback -- path/to/Other.rbxm`. Rojo asks before writing, and `-y` skips that.
+4. `assets/shared/` is tracked in git. Both generated projects map it to `ReplicatedStorage.Assets`, so `pesde run dev` serves it.
+
+Rules: prefabs hold no scripts (code lives in `src/`). `syncback` refuses a file that isn't a single `Assets` folder, or that has scripts under it. Syncback (Rojo 7.7) writes a Model with children as a binary `.rbxm`, e.g. `assets/shared/Tiles/Ground.rbxm`, and only Folders become directories. So prefab diffs are opaque in git: review them in Studio. Still to confirm with a real prefab: how MeshParts, unions and SurfaceAppearances come out. `assets/shared/` is empty (and untracked by git) until the first syncback, and `generate` creates it.
+
+Never edit `assets/shared/` by hand: the next syncback overwrites it. `assets.project.json` is generated.

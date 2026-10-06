@@ -4,6 +4,7 @@ roblox_packages/
 roblox_server_packages/
 
 **/*.rbx[lm]*
+!assets/**
 .DS_Store
 roblox.yml
 roblox.toml

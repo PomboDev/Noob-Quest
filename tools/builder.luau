@@ -19,6 +19,11 @@
 	`default.project.json` points at `src/` and only feeds the sourcemap
 	(luau-lsp + darklua's require conversion). `build.project.json` points at
 	darklua's output in `out/` and is what Rojo serves and builds.
+
+	Both map ReplicatedStorage.Assets to `assets/shared/`, the prefabs pulled
+	from the asset place. `assets.project.json` maps only that folder: it is
+	what `rojo syncback` writes through, so syncback never touches code. Its
+	root is the Assets folder itself, matching the model file syncback reads.
 ]=]
 
 local fs = require("@lune/fs")
@@ -32,6 +37,8 @@ local DARKLUA_CONFIG = ".darklua.json"
 local SOURCE_PROJECT = "default.project.json"
 local BUILD_PROJECT = "build.project.json"
 local SOURCEMAP = "sourcemap.json"
+local ASSETS_DIR = "assets/shared"
+local ASSETS_PROJECT = "assets.project.json"
 -- Everything StyLua formats and checks.
 local FORMAT_PATHS = { "src", "tools", "tests" }
 
@@ -214,6 +221,8 @@ local function render(entries: { Entry }, root: string): Node
 		tree = {
 			["$className"] = "DataModel",
 			ReplicatedStorage = {
+				-- darklua never processes assets, so this is the same under any root.
+				Assets = { ["$path"] = ASSETS_DIR },
 				Packages = { ["$path"] = "roblox_packages" },
 				Source = shared,
 			},
@@ -222,6 +231,15 @@ local function render(entries: { Entry }, root: string): Node
 				Packages = { ["$path"] = "roblox_server_packages" },
 			},
 		},
+	}
+end
+
+-- The project syncback writes through. The input is a model file whose root is
+-- the Assets folder, so that folder is the root of the project too.
+local function renderAssets(): Node
+	return {
+		name = "assets",
+		tree = { ["$path"] = ASSETS_DIR },
 	}
 end
 
@@ -241,8 +259,18 @@ local function generateBuild()
 	writeJson(BUILD_PROJECT, render(collectEntries(), OUT_DIR))
 end
 
--- Writes both project files and regenerates the sourcemap.
+-- Writes assets.project.json. Creates the assets folder on a fresh clone, so
+-- every project's Assets $path exists.
+local function generateAssets()
+	if not fs.isDir(ASSETS_DIR) then
+		fs.writeDir(ASSETS_DIR)
+	end
+	writeJson(ASSETS_PROJECT, renderAssets())
+end
+
+-- Writes every project file and regenerates the sourcemap.
 local function generate()
+	generateAssets()
 	generateSource()
 	generateBuild()
 end
@@ -309,10 +337,13 @@ return {
 	DARKLUA_CONFIG = DARKLUA_CONFIG,
 	BUILD_PROJECT = BUILD_PROJECT,
 	SOURCEMAP = SOURCEMAP,
+	ASSETS_DIR = ASSETS_DIR,
+	ASSETS_PROJECT = ASSETS_PROJECT,
 	FORMAT_PATHS = FORMAT_PATHS,
 
 	run = run,
 	generate = generate,
+	generateAssets = generateAssets,
 	generateSource = generateSource,
 	generateBuild = generateBuild,
 	processSources = processSources,
@@ -323,4 +354,5 @@ return {
 	-- Exposed for tests.
 	describe = describe,
 	render = render,
+	renderAssets = renderAssets,
 }

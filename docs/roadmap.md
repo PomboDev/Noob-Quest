@@ -111,14 +111,14 @@ The act is a tile grid: about 24×24 tiles of 12 studs, so roughly 288 studs acr
 - Fallback: if a client-built map ever causes trouble, the server can run the same `MapBuilder`, which is a single switch.
 
 **Prefabs and asset pipeline:**
-- Tile and structure prefabs, plus enemy and VFX models, are authored through the Studio MCP in an asset place (`places/Assets.rbxl`, gitignored, not Rojo-connected). The MCP tools are `execute_luau`, `insert_asset`, `generate_procedural_model`, and `screen_capture` for review.
-- The asset place is saved by hand in Studio (the MCP can't save files), then `pesde run syncback` pulls `ReplicatedStorage.Assets` into `assets/shared/`.
+- Tile and structure prefabs, plus enemy and VFX models, are authored through the Studio MCP in an asset place (not Rojo-connected). The MCP tools are `execute_luau`, `insert_asset`, `generate_procedural_model`, and `screen_capture` for review.
+- The `Assets` folder is saved by hand in Studio (right-click, Save to File as `assets/places/Assets.rbxm`, tracked as the source of the prefabs; the MCP can't save files), then `pesde run syncback` pulls it into `assets/shared/`. The model file holds only the folder, so the baseplate and Terrain never come along.
 - Prefabs follow a contract: a fixed 12×12 footprint per tile, the pivot at the tile centre, and anchored. Structures declare their footprint size as an attribute. `TileSet` validates that every referenced prefab exists.
 - Missing prefabs fall back to code-built greybox, so generation work never waits on art.
 - **Builder changes** (`tools/builder.luau`):
   - map `ReplicatedStorage.Assets ← assets/shared` in both projects
-  - generate `assets.project.json`, which contains only that folder, so syncback never touches code
-- New `tools/syncback.luau` and a `syncback` script in `pesde.toml`. Add `!assets/**` to `.gitignore`, which currently ignores every `*.rbxm`. Avoid Terrain: there's one per place and it can't be scoped.
+  - generate `assets.project.json`, rooted at `assets/shared`, so syncback never touches code
+- New `tools/syncback.luau` and a `syncback` script in `pesde.toml`. Add `!assets/**` to `.gitignore`, which currently ignores every `*.rbxm`.
 
 **Interactables** use `ProximityPrompt`, which is touch-friendly with large targets:
 - teleporter
@@ -135,7 +135,7 @@ A kill plane returns fallen heroes to spawn.
 - **`Difficulty`** (pure): a coefficient computed from elapsed minutes, act index and party size, in the style of Risk of Rain: `(1 + k·minutes·partyFactor) · 1.15^act`. It scales enemy HP and damage and the director's credit rate.
 - **`WaveDirector`** (pure): a credit-based director. It earns credits per second, scaled by the difficulty coefficient, with a boost while charging. It spends them on enemy "cards" by cost and weight, never past the alive cap. The output is a list of spawn decisions, which the service places on walkable cells off-screen from the heroes.
 - **Teleporter:** a prompt starts the charge. The charge fills (about 90 s at base) only while every alive hero is inside the ring, which is visible on the ground. At 100% the boss spawns at the teleporter. Killing the boss opens the exit portal.
-- **Run state replication:** `RunProtocol` sends a full view on change (phase, map seed/act/version, charge %, timer, difficulty label, boss entity id, results), the same pattern as `TradeProtocol`.
+- **Run state replication:** `RunProtocol` sends a full view on change (phase, act, timer, difficulty, charge %, the run's coins and XP, heroes alive), the same pattern as `TradeProtocol`. The map's `(seed, act index, version)` travels separately, in `world`'s `onAct`.
 - **Results:** coins and XP go through `PlayerService.updateData` at victory or defeat. Nothing a player picked up is ever lost. Phase 1 offers "Play again" on the same server.
 
 ### Items, gear, runewords and backpack (`items`, `loot`, `inventory`). Phase 2
@@ -177,6 +177,8 @@ A kill plane returns fallen heroes to spawn.
 ## Phase 1: vertical slice (solo, Warrior, one act)
 
 Order matters. Each step ends with `pesde run check` green.
+
+**Status:** steps 1 to 10 are built and play-tested end to end in Studio through the MCP: a run starts by itself, the map streams in, the teleporter charges, the boss appears and dies, the portal pays out and ends the run, defeat pays too, and "Play again" starts a fresh act. Still to do for the slice: play-test on a touch device or the device emulator, the performance numbers under *Verification*, and the real art (tile, statue and enemy prefabs: everything is greybox for now).
 
 1. **Docs:** write `docs/roadmap.md` (this design) and `docs/world-generation.md` (the three generation steps, the tile and prefab contract, the MCP asset workflow). Add a short "World and assets" pointer to `CLAUDE.md`.
 2. **World generation core:**
@@ -254,5 +256,5 @@ No player-data reshape in phase 1. Rewards use the existing `coins`/`level`/`xp`
 - **Syncback fidelity** (MeshPart, SurfaceAppearance, unions) is checked in step 2 before any real map work.
 - **Generation determinism across server and client** is the core assumption of client-built maps. It's covered by specs and a dev-only check: the client hashes its grid and the server compares that hash with its own. If they differ, it logs a warning and the server builds the map itself.
 - **Client-only collision geometry:** exploiters could already noclip with client-owned characters, and server sanity checks (below) cover both.
-- The asset place must be saved by hand in Studio. The MCP can't save files.
+- The Assets folder must be saved by hand in Studio (Save to File). The MCP can't save files.
 - Character movement is client-authoritative, as everywhere in Roblox. Add server speed and teleport sanity checks before co-op.

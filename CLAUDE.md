@@ -16,6 +16,7 @@ pesde is installed in `~/.pesde/bin`. Run scripts with `pesde run <name>`:
 - `format`: apply StyLua
 - `test`: unit tests in `tests/*.spec.luau`
 - `generate`: regenerate the Rojo project files and sourcemap (needed after adding, removing or renaming files in `src/`)
+- `syncback`: pull `ReplicatedStorage.Assets` from the saved Assets folder (`assets/places/Assets.rbxm`) into `assets/shared/`. Pass `-- --dry-run` to preview
 - `dev`, `build`, `compile`: see the README
 
-Never edit `default.project.json`, `build.project.json` or `sourcemap.json` by hand. `tools/builder.luau` generates them.
+Never edit `default.project.json`, `build.project.json`, `assets.project.json` or `sourcemap.json` by hand. `tools/builder.luau` generates them.

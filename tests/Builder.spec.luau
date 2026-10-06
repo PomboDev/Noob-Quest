@@ -161,6 +161,16 @@ return {
 		Expect.equal(tree.ServerScriptService.StartUp.Server["$path"], "src/startup/Server.server.luau")
 	end,
 
+	["assets map into ReplicatedStorage under any root"] = function()
+		Expect.equal(render({}, "src").ReplicatedStorage.Assets["$path"], "assets/shared")
+		Expect.equal(render({}, "out").ReplicatedStorage.Assets["$path"], "assets/shared")
+	end,
+
+	["the assets project is rooted at the assets folder"] = function()
+		-- The syncback input is a model whose root is Assets: a DataModel root would be refused.
+		Expect.deepEqual(builder.renderAssets().tree, { ["$path"] = "assets/shared" })
+	end,
+
 	["the build project points at the compiled output"] = function()
 		local tree = render({ "core/Log.luau" }, "out")
 		Expect.equal(tree.ReplicatedStorage.Source.Core.Log["$path"], "out/core/Log.luau")

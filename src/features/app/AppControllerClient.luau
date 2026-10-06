@@ -10,8 +10,14 @@
 
 local Players = game:GetService("Players")
 
+local AbilityButtons = require("@Features/heroes/modules/AbilityButtons")
+local BossBar = require("@Features/enemies/modules/BossBar")
+local HeroBar = require("@Features/heroes/modules/HeroBar")
+local HeroController = require("@Features/heroes/HeroControllerClient")
 local Log = require("@Core/Log")
 local PlayerController = require("@Features/player/PlayerControllerClient")
+local ResultsScreen = require("@Features/run/modules/ResultsScreen")
+local RunHud = require("@Features/run/modules/RunHud")
 local Vide = require("@Packages/vide")
 local VideCharm = require("@Packages/vide-charm")
 
@@ -44,6 +50,17 @@ local function App()
 		ResetOnSpawn = false,
 
 		CoinsLabel(),
+		HeroBar(),
+		RunHud(),
+		BossBar(),
+		AbilityButtons({
+			abilities = HeroController.getDef().abilities,
+			cooldownEnds = HeroController.state.cooldownEnds,
+			inputMode = HeroController.state.inputMode,
+			keys = HeroController.getAbilityKeys(),
+			onUse = HeroController.activate,
+		}),
+		ResultsScreen(),
 	})
 end
 

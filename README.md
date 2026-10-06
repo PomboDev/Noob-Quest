@@ -40,7 +40,8 @@ Run with `pesde run <name>`.
 | `dev` | Dev build into `out/`, darklua watch, `rojo serve`. Regenerates the project files when files are added, removed or renamed |
 | `build` | Release build → `game.rbxl` |
 | `compile` | Release compile of `src/` → `out/` |
-| `generate` | Regenerate `default.project.json`, `build.project.json` and `sourcemap.json` |
+| `generate` | Regenerate `default.project.json`, `build.project.json`, `assets.project.json` and `sourcemap.json` |
+| `syncback` | Pull `ReplicatedStorage.Assets` from the saved Assets folder (`assets/places/Assets.rbxm`) into `assets/shared/`. Optional arguments go after `--`: a model path, then flags such as `--dry-run`, which go to `rojo syncback` |
 | `check` | What CI should run: `generate`, StyLua `--check`, selene, luau-lsp type check, `test` |
 | `format` | StyLua over `src`, `tools` and `tests` |
 | `test` | Lune unit tests in `tests/*.spec.luau` |
@@ -60,6 +61,8 @@ src/ ──darklua──▶ out/ ──Rojo──▶ Studio / game.rbxl
 2. `generate` maps the layout of `src/` to a Rojo project, so there is no project file to edit by hand
 3. darklua rewrites the aliases into instance paths (using the sourcemap) and injects `__DEV__`, which makes `Log.debug` print only in dev builds
 4. Rojo serves or builds the result in `out/`
+
+`assets/shared/` holds prefabs authored in a separate asset place. Both projects map it to `ReplicatedStorage.Assets`, and `assets.project.json` (tracked) lets `syncback` write only that folder.
 
 `default.project.json` is tracked because tools that read the sourcemap need it right after cloning. `build.project.json`, `sourcemap.json` and `out/` are generated and ignored.
 

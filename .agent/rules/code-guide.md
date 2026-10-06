@@ -25,10 +25,11 @@ src/
 │       ├── FeatureNameServiceServer.luau
 │       └── modules/       # Internal modules (never auto-loaded)
 └── startup/               # Entry scripts (call Loader)
+assets/shared/             # Prefabs for ReplicatedStorage.Assets, written by `pesde run syncback`, never edited by hand
     ├── Client.client.luau
     └── Server.server.luau
 tests/                     # Lune unit tests (*.spec.luau), never shipped
-tools/                     # pesde scripts: dev, build, compile, generate, check, format, test
+tools/                     # pesde scripts: dev, build, compile, generate, syncback, check, format, test
 ```
 
 | Directory | Purpose |
@@ -331,7 +332,8 @@ UI: `vide`, `vide-ripple` (animation). State: `charm`, with `vide-charm` to bind
 | `dev` | Dev build, darklua watch, `rojo serve`. Regenerates project files when files are added, removed or renamed |
 | `build` | Release compile + `rojo build` → `game.rbxl` |
 | `compile` | Release compile of `src/` → `out/` |
-| `generate` | Regenerate `default.project.json`, `build.project.json` and `sourcemap.json` |
+| `generate` | Regenerate `default.project.json`, `build.project.json`, `assets.project.json` and `sourcemap.json` |
+| `syncback` | Pull `ReplicatedStorage.Assets` from the saved Assets folder (`assets/places/Assets.rbxm`) into `assets/shared/` |
 | `check` | Everything CI runs: `generate`, StyLua `--check`, selene, luau-lsp type check, `test` |
 | `format` | StyLua over `src`, `tools` and `tests` |
 | `test` | Lune unit tests in `tests/*.spec.luau` |
