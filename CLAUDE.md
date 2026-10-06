@@ -4,6 +4,10 @@ Feature-based Roblox game template (Luau, pesde, Rojo, darklua). See [README.md]
 
 @.agent/rules/code-guide.md
 
+## Game design
+
+This is a Hero Siege–style action roguelite. [docs/roadmap.md](docs/roadmap.md) holds the feature map and build order. Maps are generated from a seed: see [docs/world-generation.md](docs/world-generation.md) before touching `features/world`. Its determinism rules matter, because the server and clients must produce identical grids.
+
 ## Commands
 
 pesde is installed in `~/.pesde/bin`. Run scripts with `pesde run <name>`:

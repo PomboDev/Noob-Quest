@@ -29,6 +29,9 @@
           "RateLimit": {
             "$path": "src/core/RateLimit.luau"
           },
+          "Rng": {
+            "$path": "src/core/Rng.luau"
+          },
           "StateMachine": {
             "$path": "src/core/StateMachine.luau"
           }
@@ -111,6 +114,36 @@
             },
             "TradeControllerClient": {
               "$path": "src/features/trade/TradeControllerClient.luau"
+            }
+          },
+          "World": {
+            "$className": "Folder",
+            "Modules": {
+              "$className": "Folder",
+              "ActDefs": {
+                "$path": "src/features/world/modules/ActDefs.luau"
+              },
+              "ActTypes": {
+                "$path": "src/features/world/modules/ActTypes.luau"
+              },
+              "Decorate": {
+                "$path": "src/features/world/modules/Decorate.luau"
+              },
+              "GenerateAct": {
+                "$path": "src/features/world/modules/GenerateAct.luau"
+              },
+              "PathCarver": {
+                "$path": "src/features/world/modules/PathCarver.luau"
+              },
+              "PoiLayout": {
+                "$path": "src/features/world/modules/PoiLayout.luau"
+              },
+              "TileSet": {
+                "$path": "src/features/world/modules/TileSet.luau"
+              },
+              "Wfc": {
+                "$path": "src/features/world/modules/Wfc.luau"
+              }
             }
           }
         },
